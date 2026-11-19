@@ -1,13 +1,14 @@
 import { ENGINE_HEARTBEAT_MS, REDIS_KEYS } from "@/constants"
 import { isComfyOnline } from "@/libs/comfy/client"
-import { discoverModels } from "@/libs/comfy/discover"
+import { discoverModels, type ComfyModels } from "@/libs/comfy/discover"
 import { logger } from "@/libs/logger"
 import { readEngineStatus, writeEngineStatus } from "@/libs/queue"
 import { redis } from "@/libs/redis"
 
 import { readVramUsers } from "./gpu"
+import { findVoiceModel } from "./voice"
 
-const NO_MODELS: Engine.Models = { image: null, video: null, cutout: null }
+const NO_COMFY_MODELS: ComfyModels = { image: null, video: null, cutout: null }
 
 /**
  * Model files change rarely (a download, a delete), and the VRAM counter costs a PowerShell start: both are
@@ -18,7 +19,7 @@ const VRAM_REFRESH_MS = 20_000
 
 type EngineState = {
   isComfyOnline: boolean
-  models: Engine.Models
+  models: ComfyModels
   vramUsers: Engine.VramUser[]
   runningJobId: string | null
   modelsAt: number
@@ -27,7 +28,7 @@ type EngineState = {
 
 const state: EngineState = {
   isComfyOnline: false,
-  models: NO_MODELS,
+  models: NO_COMFY_MODELS,
   vramUsers: [],
   runningJobId: null,
   modelsAt: 0,
@@ -53,6 +54,15 @@ export async function isAnotherWorkerRunning() {
 }
 
 /**
+ * Everything that can run right now: what ComfyUI has, and the voice engine, which is installed beside
+ * this project and doesn't need ComfyUI at all.
+ */
+function allModels(): Engine.Models {
+  const voice = findVoiceModel()
+  return { ...state.models, voice: voice ? { model: voice } : null }
+}
+
+/**
  * Checks ComfyUI and writes the worker's status to Redis. Called on a timer, and directly whenever the
  * running job changes so the browsers hear about it at once.
  */
@@ -62,7 +72,7 @@ export async function reportEngine() {
   state.isComfyOnline = await isComfyOnline()
 
   if (!state.isComfyOnline) {
-    state.models = NO_MODELS
+    state.models = NO_COMFY_MODELS
     state.modelsAt = 0
   } else if (!wasOnline || now - state.modelsAt > MODELS_REFRESH_MS) {
     state.models = await discoverModels().catch(() => state.models)
@@ -79,7 +89,7 @@ export async function reportEngine() {
   const client = await redis()
   await writeEngineStatus({
     isComfyOnline: state.isComfyOnline,
-    models: state.models,
+    models: allModels(),
     vramUsers: state.vramUsers,
     runningJobId: state.runningJobId,
     queued: await client.lLen(REDIS_KEYS.queue),
@@ -122,7 +132,7 @@ export function setRunningJob(id: string | null) {
  */
 export async function currentModels() {
   if (state.modelsAt === 0) await reportEngine()
-  return state.models
+  return allModels()
 }
 
 /**

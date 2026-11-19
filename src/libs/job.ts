@@ -1,4 +1,8 @@
-import type { ImageValidator, VideoValidator } from "@/actions/jobs/validator.zod"
+import type {
+  ImageValidator,
+  VideoValidator,
+  VoiceValidator
+} from "@/actions/jobs/validator.zod"
 import { IMAGE_SIZES, VIDEO_SAMPLING } from "@/constants"
 
 /**
@@ -28,6 +32,47 @@ export function toImageParams(input: ImageValidator): Media.ImageParams {
     cfg: input.cfg,
     seed: input.seed ?? randomSeed(),
     shouldRemoveBackground: input.shouldRemoveBackground
+  }
+}
+
+/**
+ * The lines of a voice script that will be spoken: trimmed, without the empty ones. Each becomes one clip,
+ * so its index here is the clip's position.
+ */
+export function scriptLines(script: string) {
+  return script
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+/**
+ * Turns a validated voice form into the parameters stored with the job.
+ *
+ * @param models - What the engine has installed, or `null` when the worker hasn't reported
+ * @returns The parameters, or a `message` when the voice engine isn't installed
+ */
+export function toVoiceParams(
+  input: VoiceValidator,
+  models: Engine.Models | null
+): { ok: true; params: Media.VoiceParams } | { ok: false; message: string } {
+  const model = models?.voice?.model
+  if (!model) {
+    return {
+      ok: false,
+      message: "The voice engine isn't installed, or the worker isn't running."
+    }
+  }
+
+  return {
+    ok: true,
+    params: {
+      kind: "voice",
+      model,
+      voice: input.voice,
+      description: input.description,
+      seed: input.seed ?? randomSeed()
+    }
   }
 }
 

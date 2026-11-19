@@ -1,14 +1,15 @@
 ---
 name: web-stack
 description:
-  Project rules for Frozen, a local media studio (a web UI that generates images and
-  videos through ComfyUI). Load before writing, editing, reviewing, or formatting any
-  .ts/.tsx/.css file, before running install or database commands, and before designing a
-  feature — even when the request names no library (e.g. "add an audio mode", "add a
-  setting to the video form", "show the queue"). Covers the stack (Next.js 16 with Cache
-  Components, React 19, HeroUI v3, Tailwind v4, Keyline icons, Drizzle ORM + Postgres,
-  Redis queue, Zod v4, nuqs, react-hook-form, zustand), folder layout, UI components,
-  coding style, and the queue / worker / ComfyUI engine.
+  Project rules for Frozen, a local media studio (a web UI that generates images, videos
+  and voice lines through ComfyUI and a text-to-speech service). Load before writing,
+  editing, reviewing, or formatting any .ts/.tsx/.css file, before running install or
+  database commands, and before designing a feature — even when the request names no
+  library (e.g. "add an audio mode", "add a setting to the video form", "show the queue").
+  Covers the stack (Next.js 16 with Cache Components, React 19, HeroUI v3, Tailwind v4,
+  Keyline icons, Drizzle ORM + Postgres, Redis queue, Zod v4, nuqs, react-hook-form,
+  zustand), folder layout, UI components, coding style, and the queue / worker / ComfyUI
+  engine.
 ---
 
 # Web Stack — Project Frozen
@@ -52,6 +53,7 @@ in `node_modules/@heroui/styles/dist/components/`.
 | Database     | Drizzle ORM 1.0 (rc) + `postgres` (js)                                 | Relational Queries v2 (`defineRelations`), `drizzle-kit`    |
 | Queue        | Redis (`redis` v6)                                                     | List + pub/sub — see [engine](references/engine.md)         |
 | Engine       | ComfyUI, driven by `src/worker/`                                       | The app never calls it — see [engine](references/engine.md) |
+| Voice        | Japanese Parler-TTS in `tts/` (Python 3.12, PyTorch)                   | Started by the worker — see [engine](references/engine.md)  |
 | Validation   | Zod v4                                                                 | env, Server Action input, forms                             |
 | URL state    | nuqs v2                                                                | `createSearchParamsCache` on the server                     |
 | Forms        | react-hook-form v7 + `@hookform/resolvers`                             | Zod resolver, shares the action's validator                 |
@@ -76,15 +78,27 @@ in `node_modules/@heroui/styles/dist/components/`.
 - `bun run dev` — the app on `http://localhost:8190` and the worker, together.
   `bun run start:dev` / `bun run worker` run one of them. The worker has no watch mode:
   restart it after changing anything under `src/worker/` or `src/libs/comfy/`.
+- `launcher/Frozen.ps1` — what the owner's Desktop shortcut runs: ComfyUI, the app and the
+  worker in one go, with a tray icon. It serves the **production build** (`start:prod`),
+  rebuilding first when the code is newer than `.next/BUILD_ID`, so an edit does not show
+  in a running Frozen: restart it, or work against a dev server (`-Dev`, or
+  `bun run dev`). If it is running (port 8190 answers and nobody started it in a
+  terminal), stop it with
+  `powershell -ExecutionPolicy Bypass -File launcher/Frozen.ps1 -Quit` before starting
+  your own servers or a build, and tell the owner you did. Its output is in `logs/`.
 - `bunx prettier --write <files>` — format what you touched.
 - `bunx next typegen && bunx tsc --noEmit -p .` — quick type-check (typegen creates
-  `RouteContext` etc.).
+  `RouteContext` etc.). After changing `src/types/*.d.ts`, delete `tsconfig.tsbuildinfo`
+  first: the incremental cache has let a stale result through.
 - `bun run build` — full production build. It deletes `.next` first, so stop the dev
   server before running it and start it again after.
 - `bun run drizzle:generate` / `bun run drizzle:migrate` — see
   [database.md](references/database.md).
 - `bun tests/status.spec.ts` — the worker's status, the Redis queue and the newest jobs.
 - `bun tests/job.spec.ts "<prompt>"` — queue an image job without the UI.
+- `tts/.venv/Scripts/python.exe tts/server.py --model-dir tts/models/japanese-parler-tts-mini --output-root <folder>`
+  — run the voice service by hand to try a request with `curl`. Python packages for it are
+  installed with `uv pip install --python tts/.venv/Scripts/python.exe …`.
 - Ad-hoc scripting in Bash (bulk edits, quick data checks): if Python is easier for you,
   use it (`python -I`) instead of `bun -e`.
 
@@ -101,9 +115,9 @@ in `node_modules/@heroui/styles/dist/components/`.
   owner's to try.
 - **Downloads need the owner's go-ahead** (models, Python packages): say what, from where,
   and how big, then wait.
-- **ComfyUI is a separate program.** Frozen doesn't start or stop it, and reads which
-  models are installed from it. A mode whose models are missing is disabled with a note,
-  never an error.
+- **ComfyUI is a separate program.** The app and the worker don't start or stop it (only
+  the launcher does, as a convenience), and read which models are installed from it. A
+  mode whose models are missing is disabled with a note, never an error.
 
 ## Definition of done
 

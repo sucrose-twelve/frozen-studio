@@ -200,7 +200,11 @@ export function JobResult({
                     <Modal.Heading>Sprite sheet</Modal.Heading>
                   </Modal.Header>
                   <Modal.Body>
-                    <SpriteSheet frames={job.frames} hasAlpha={framesHaveAlpha} />
+                    <SpriteSheet
+                      name={`sprite-${job.id.slice(0, 8)}`}
+                      frames={job.frames}
+                      hasAlpha={framesHaveAlpha}
+                    />
                   </Modal.Body>
                 </Modal.Dialog>
               </Modal.Container>

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from "@keyline-icons/react"
+import { AudioLines, ChevronLeft, ChevronRight } from "@keyline-icons/react"
 import { Play, Star } from "@keyline-icons/react/fill"
 import type { Metadata } from "next"
 import Image from "next/image"
@@ -7,6 +7,7 @@ import NextLink from "next/link"
 import { readGallery, type GalleryItem } from "@/actions/jobs/read"
 import { cls } from "@/libs/utils"
 
+import { DeleteJobButton } from "../components/delete-job-button"
 import { GalleryFilters } from "./components/gallery-filters"
 import { queryValidator, type QueryValidator } from "./validator.nuqs"
 
@@ -27,41 +28,64 @@ function pageHref(query: QueryValidator, page: number) {
   return search ? `/gallery?${search}` : "/gallery"
 }
 
+/**
+ * One result: a link back into the studio, with a delete button over its corner.
+ *
+ * The button sits beside the link, not inside it: a button in a link is not valid, and its press would
+ * follow the link. It shows on hover or keyboard focus, and always where there is no hover (touch).
+ */
 function GalleryTile({ item }: Readonly<{ item: GalleryItem }>) {
   const { asset, poster } = item
   const cover = asset.kind === "image" ? asset : poster
 
   return (
-    <NextLink
-      href={`/?job=${item.jobId}&mode=${item.jobKind}&asset=${asset.id}`}
-      title={item.prompt || undefined}
-      className={cls(
-        "group border-border hover:border-glacier relative block aspect-square overflow-hidden rounded-xl border transition-colors",
-        asset.role === "cutout" ? "use-checkerboard" : "bg-surface-secondary"
-      )}>
-      {cover ? (
-        <Image
-          src={cover.url}
-          alt={item.prompt || "Result"}
-          width={cover.width}
-          height={cover.height}
-          sizes='(min-width: 1280px) 16vw, (min-width: 768px) 25vw, 50vw'
-          quality={75}
-          className='size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]'
-        />
-      ) : null}
+    <div className='group relative'>
+      <NextLink
+        href={`/?job=${item.jobId}&mode=${item.jobKind}&asset=${asset.id}`}
+        title={item.prompt || undefined}
+        className={cls(
+          "border-border hover:border-glacier relative block aspect-square overflow-hidden rounded-xl border transition-colors",
+          asset.role === "cutout" ? "use-checkerboard" : "bg-surface-secondary"
+        )}>
+        {asset.kind === "audio" ? (
+          <span className='flex size-full flex-col gap-2 p-3'>
+            <AudioLines size={22} strokeWidth={1.5} className='text-glacier shrink-0' />
+            <span lang='ja' className='line-clamp-5 text-sm leading-relaxed'>
+              {item.prompt}
+            </span>
+          </span>
+        ) : cover ? (
+          <Image
+            src={cover.url}
+            alt={item.prompt || "Result"}
+            width={cover.width}
+            height={cover.height}
+            sizes='(min-width: 1280px) 16vw, (min-width: 768px) 25vw, 50vw'
+            quality={75}
+            className='size-full object-contain transition-transform duration-300'
+          />
+        ) : null}
 
-      {asset.kind === "video" ? (
-        <span className='bg-night/70 text-frost absolute bottom-2 left-2 grid size-7 place-items-center rounded-full'>
-          <Play size={13} />
-        </span>
-      ) : null}
-      {asset.isFavorite ? (
-        <span className='bg-night/70 text-warning absolute top-2 right-2 grid size-7 place-items-center rounded-full'>
-          <Star size={14} />
-        </span>
-      ) : null}
-    </NextLink>
+        {asset.kind === "video" ? (
+          <span className='bg-night/70 text-frost absolute bottom-2 left-2 grid size-7 place-items-center rounded-full'>
+            <Play size={13} />
+          </span>
+        ) : null}
+        {asset.isFavorite ? (
+          <span className='bg-night/70 text-warning absolute top-2 right-2 grid size-7 place-items-center rounded-full'>
+            <Star size={14} />
+          </span>
+        ) : null}
+      </NextLink>
+
+      <div className='absolute right-2 bottom-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100'>
+        <DeleteJobButton
+          jobId={item.jobId}
+          resultCount={item.jobResults}
+          className='bg-night/75 text-frost hover:bg-night rounded-full'
+        />
+      </div>
+    </div>
   )
 }
 
@@ -79,7 +103,7 @@ export default async function Gallery({ searchParams }: NextSearchParams) {
           <h1 className='text-2xl font-semibold tracking-tight'>Gallery</h1>
           <p className='text-muted mt-1 text-sm'>
             {page.count === 1 ? "1 result" : `${page.count} results`}. Open one to reroll
-            it, reuse its settings, or send it on.
+            it, reuse its settings, or send it on; hover one to delete its job.
           </p>
         </div>
         <GalleryFilters />

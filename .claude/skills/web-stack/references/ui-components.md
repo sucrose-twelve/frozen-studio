@@ -53,6 +53,9 @@ Don't write a component from memory. In order of preference:
 
 A component that isn't in the table yet: read its docs first, then add a row here.
 
+Sound is the browser's own `<audio controls preload='metadata'>`: it follows the dark
+colour scheme set on `<html>`, and `/api/media` answers its range requests so it can seek.
+
 ## Patterns
 
 ### Forms
@@ -68,6 +71,10 @@ two controls beside them. Use them; don't restyle per form.
   fixed set (quality, size, length); a `Select` is for a list that can grow (models).
 - `SubmitBar` — the sticky foot of a form: a summary of what will run, or the reason it
   can't (`blocker`), and the submit button.
+
+Buttons that act on one result live in `asset-buttons.tsx` (`DownloadButton`,
+`FavoriteButton`); `ResultActions` is the row under a result, and `DeleteJobButton` the
+delete with its confirmation.
 
 **Every setting is visible.** Don't tuck settings into a `Disclosure`, accordion or
 "Advanced" toggle: the owner asked for them to be shown outright, with the less-used ones
@@ -107,6 +114,21 @@ const handleReroll = useCallback(async () => {
   quality, not as a resized copy.
 - An image with transparency sits on `.use-checkerboard`.
 
+### Controls on top of a tile
+
+A button doesn't go inside a link. A tile that is a link and also has a button (the
+gallery's delete) is a `group relative` wrapper holding the link and, beside it, the
+button positioned over a corner. The button shows on hover or keyboard focus
+(`opacity-0 group-hover:opacity-100 group-focus-within:opacity-100`) and always on touch
+(`pointer-coarse:opacity-100`).
+
+### Files made in the browser
+
+What the browser can build from what is already on the page is built there, not on the
+server: the sprite sheet (`sprite-sheet.tsx`) is drawn on a canvas and downloaded as a zip
+with its README and a WebM preview. The pieces are in `@/libs/sprite-sheet`
+(`describeSpriteSheet`, `recordPreview`, `saveBlob`) and `@/libs/zip` (`createZip`).
+
 ## Theme
 
 `src/styles/theme.css` is the whole theme. The app is dark-only and built on four colours:
@@ -136,4 +158,5 @@ variants from those. So:
 
 Keyline (`@keyline-icons/react`), covered in [libraries.md](libraries.md#keyline-icons).
 Each mode has its icon, used wherever the mode is named: `ImageSparkles` (image),
-`VideoSparkles` (video), `Scissors` (cutout).
+`VideoSparkles` (video), `Scissors` (cutout), `Mic` (voice). A voice clip, which has no
+picture, is shown as `AudioLines`.

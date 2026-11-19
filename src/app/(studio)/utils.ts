@@ -1,5 +1,9 @@
-import type { ImageValidator, VideoValidator } from "@/actions/jobs/validator.zod"
-import { IMAGE_DEFAULTS } from "@/constants"
+import type {
+  ImageValidator,
+  VideoValidator,
+  VoiceValidator
+} from "@/actions/jobs/validator.zod"
+import { IMAGE_DEFAULTS, VOICE_PRESETS } from "@/constants"
 
 export const IMAGE_FORM_DEFAULTS: ImageValidator = {
   kind: "image",
@@ -29,6 +33,21 @@ export const VIDEO_FORM_DEFAULTS: VideoValidator = {
   seed: null,
   shouldSaveFrames: false,
   shouldRemoveBackground: false
+}
+
+export const VOICE_FORM_DEFAULTS: VoiceValidator = {
+  kind: "voice",
+  prompt: "",
+  voice: VOICE_PRESETS[0].id,
+  description: VOICE_PRESETS[0].description,
+  seed: null
+}
+
+/**
+ * The name of a voice: its preset's label, or "Custom" for a description written by hand.
+ */
+export function voiceLabel(voice: string) {
+  return VOICE_PRESETS.find((preset) => preset.id === voice)?.label ?? "Custom"
 }
 
 /**

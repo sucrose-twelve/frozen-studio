@@ -1,7 +1,7 @@
 "use client"
 
 import { Spinner } from "@heroui/react"
-import { CircleAlert, CircleSlash, Scissors } from "@keyline-icons/react"
+import { AudioLines, CircleAlert, CircleSlash, Scissors } from "@keyline-icons/react"
 import { Play } from "@keyline-icons/react/fill"
 import Image from "next/image"
 import NextLink from "next/link"
@@ -65,6 +65,10 @@ function RecentJob({
         ) : job.kind === "video" ? (
           <span className='bg-night/70 text-frost absolute right-1 bottom-1 grid size-5 place-items-center rounded-full'>
             <Play size={10} />
+          </span>
+        ) : job.kind === "voice" ? (
+          <span className='text-glacier absolute inset-0 grid place-items-center'>
+            <AudioLines size={24} strokeWidth={1.5} />
           </span>
         ) : job.kind === "cutout" ? (
           <span className='bg-night/70 text-frost absolute right-1 bottom-1 grid size-5 place-items-center rounded-full'>

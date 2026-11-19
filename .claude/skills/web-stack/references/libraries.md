@@ -105,6 +105,9 @@ const handleSubmit = useMemo(
   value and `form.setValue` in a `useCallback` handler — no `Controller`.
 - Don't `watch()` the whole form — subscribe to the fields the render needs with
   `useWatch({ name: [...] })`.
+- Call `form.register(...)` in the JSX, on every render. Don't memoize what it returns:
+  `form.reset()` forgets the registered fields, and only a fresh `register` call gives the
+  input back to the form. A memoized one leaves the input showing its old text.
 - Defaults live in the route's `utils.ts` (`IMAGE_FORM_DEFAULTS`), so "reuse settings" can
   reset onto them: `form.reset({ ...IMAGE_FORM_DEFAULTS, ...fromJob })`.
 - All of a route's forms stay mounted and the inactive ones are hidden (`hidden`), so
@@ -168,6 +171,15 @@ import { groupBy, pick } from "es-toolkit"
 - Format dates with date-fns, not hand-rolled math. Timestamps in the DB are
   `timestamptz`; the app TZ is `ENV.TZ`.
 - Short run times on the canvas use `formatElapsed(ms)` from `@/libs/utils` (`"1:26"`).
+
+## Zip files and recorded video (no library)
+
+- `createZip(entries)` in `@/libs/zip` packs files into a stored (uncompressed) archive.
+  That is enough for PNG and video, which are compressed already, and it saved adding a
+  zip dependency. Reach for a real library only if something needs compression.
+- A short animation is recorded with the browser's own `MediaRecorder` from a canvas
+  (`recordPreview` in `@/libs/sprite-sheet`). It works in real time, so it takes as long
+  as the clip lasts, and it keeps transparency. A GIF would need an encoder library.
 
 ## redis (node-redis v6)
 

@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next"
 
 export const metadata: Metadata = {
   title: {
-    default: "Frozen • Local media studio",
-    template: "%s • Frozen"
+    default: "Frozen Studio • Local AI media generator",
+    template: "%s • Frozen Studio"
   },
   description:
     "Generate images, video and voice on this machine. A form-based studio on top of ComfyUI.",

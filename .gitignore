@@ -22,3 +22,12 @@ npm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# text to speech: the Python environment and the model weights
+/tts/.venv/
+/tts/models/
+__pycache__/
+
+# the launcher's logs and the icon it draws for the Desktop shortcut
+/logs/
+/launcher/frozen.ico

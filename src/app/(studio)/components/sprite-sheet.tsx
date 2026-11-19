@@ -1,12 +1,14 @@
 "use client"
 
-import { Button, Input, Spinner } from "@heroui/react"
+import { Button, Input, Spinner, toast } from "@heroui/react"
 import { Download } from "@keyline-icons/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import type { AssetView } from "@/actions/jobs/read"
 import { VIDEO_FPS } from "@/constants"
+import { describeSpriteSheet, recordPreview, saveBlob } from "@/libs/sprite-sheet"
 import { cls } from "@/libs/utils"
+import { createZip } from "@/libs/zip"
 
 import { FieldRow } from "./form-parts"
 import { OptionGroup, type Option } from "./option-group"
@@ -31,6 +33,16 @@ function loadImage(url: string) {
   })
 }
 
+function toBytes(canvas: HTMLCanvasElement) {
+  return new Promise<Uint8Array>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) return reject(new Error("The sheet could not be encoded"))
+
+      blob.arrayBuffer().then((buffer) => resolve(new Uint8Array(buffer)), reject)
+    }, "image/png")
+  })
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min))
 }
@@ -39,6 +51,7 @@ function clamp(value: number, min: number, max: number) {
  * Lays frames out on a canvas, left to right, top to bottom.
  *
  * @returns The cell size and grid used
+ * @throws {Error} When the browser gives no 2D context to draw with
  */
 function drawSheet(
   canvas: HTMLCanvasElement,
@@ -54,7 +67,9 @@ function drawSheet(
 
   canvas.width = cellWidth * usedColumns
   canvas.height = cellHeight * rows
-  const context = canvas.getContext("2d")!
+  const context = canvas.getContext("2d")
+  if (!context) throw new Error("This browser can't draw to a canvas")
+
   context.clearRect(0, 0, canvas.width, canvas.height)
   frames.forEach((frame, index) => {
     context.drawImage(
@@ -71,15 +86,21 @@ function drawSheet(
 
 /**
  * Builds a sprite sheet from a video's saved frames, in the browser: pick every Nth frame, a starting frame,
- * the number of columns and a scale, watch the selection loop, and download the sheet as one PNG.
+ * the number of columns and a scale, watch the selection loop, and download the result.
  *
+ * The download is one zip: the sheet as a PNG, a README with the frame count, speed and grid (what a game
+ * engine asks for when slicing it), and the loop as a short WebM to look at without an engine.
+ *
+ * @param name - The base name of the exported files
  * @param frames - The frames in order
  * @param hasAlpha - Whether the frames are cut out, which puts a checkerboard behind the previews
  */
 export function SpriteSheet({
+  name,
   frames,
   hasAlpha
 }: Readonly<{
+  name: string
   frames: AssetView[]
   hasAlpha: boolean
 }>) {
@@ -94,6 +115,7 @@ export function SpriteSheet({
   const [columns, setColumns] = useState(8)
   const [scale, setScale] = useState(0.5)
   const [info, setInfo] = useState("")
+  const [isPacking, setIsPacking] = useState(false)
 
   const selected = useMemo(
     () =>
@@ -120,23 +142,54 @@ export function SpriteSheet({
     []
   )
 
-  const handleDownload = useCallback(() => {
+  const handleDownload = useCallback(async () => {
     if (selected.length === 0) return
 
-    // Drawn again at full size: the on-screen canvas is the same pixels, but this keeps the two apart
-    const canvas = document.createElement("canvas")
-    drawSheet(canvas, selected, columns, scale)
-    canvas.toBlob((blob) => {
-      if (!blob) return
+    setIsPacking(true)
+    try {
+      // Drawn again off screen: the canvas on the page is the same pixels, but this keeps the two apart
+      const canvas = document.createElement("canvas")
+      const sheet = drawSheet(canvas, selected, columns, scale)
+      const frameSize = { width: sheet.cellWidth, height: sheet.cellHeight }
+      const [image, preview] = await Promise.all([
+        toBytes(canvas),
+        recordPreview(selected, frameSize, framesPerSecond)
+      ])
 
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `spritesheet-${selected.length}f.png`
-      link.click()
-      setTimeout(() => URL.revokeObjectURL(url), 5_000)
-    }, "image/png")
-  }, [selected, columns, scale])
+      const previewName = preview ? `${name}-preview.webm` : null
+      const readme = describeSpriteSheet({
+        name,
+        frames: selected.length,
+        fps: framesPerSecond,
+        columns: sheet.columns,
+        rows: sheet.rows,
+        frameWidth: sheet.cellWidth,
+        frameHeight: sheet.cellHeight,
+        hasAlpha,
+        source: { fps: VIDEO_FPS, every, start },
+        preview: previewName
+      })
+
+      const files = [
+        { name: `${name}.png`, data: image },
+        { name: `${name}.md`, data: new TextEncoder().encode(readme) }
+      ]
+      if (preview && previewName) {
+        files.push({
+          name: previewName,
+          data: new Uint8Array(await preview.arrayBuffer())
+        })
+      }
+
+      saveBlob(createZip(files), `${name}.zip`)
+    } catch (error) {
+      toast.danger(
+        error instanceof Error ? error.message : "The sprite sheet could not be packed"
+      )
+    } finally {
+      setIsPacking(false)
+    }
+  }, [selected, columns, scale, framesPerSecond, name, hasAlpha, every, start])
 
   useEffect(() => {
     let isCurrent = true
@@ -169,7 +222,9 @@ export function SpriteSheet({
 
     canvas.width = Math.min(220, first.naturalWidth)
     canvas.height = Math.round((canvas.width * first.naturalHeight) / first.naturalWidth)
-    const context = canvas.getContext("2d")!
+    const context = canvas.getContext("2d")
+    if (!context) return
+
     let index = 0
     const timer = setInterval(() => {
       context.clearRect(0, 0, canvas.width, canvas.height)
@@ -264,11 +319,20 @@ export function SpriteSheet({
         </figure>
       </div>
 
-      <div>
-        <Button variant='secondary' size='sm' onPress={handleDownload}>
+      <div className='flex flex-wrap items-center gap-3'>
+        <Button
+          variant='secondary'
+          size='sm'
+          isPending={isPacking}
+          onPress={handleDownload}>
           <Download size={15} strokeWidth={1.75} />
           Download sprite sheet
         </Button>
+        <p className='text-muted text-xs'>
+          {isPacking
+            ? "Recording the preview, which takes as long as the loop does."
+            : "A zip with the sheet (PNG), a README with the frame count and speed, and a preview (WebM)."}
+        </p>
       </div>
     </div>
   )

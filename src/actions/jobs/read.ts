@@ -5,6 +5,7 @@ import { GALLERY_PAGE_SIZE, RECENT_JOBS } from "@/constants"
 import { db, schema } from "@/drizzle"
 import { assetColumns, jobColumns } from "@/drizzle/table-columns"
 import { lastPageOf, toPagination, withPagination } from "@/drizzle/utils"
+import { scriptLines } from "@/libs/job"
 import { assetFileName } from "@/libs/media"
 
 /**
@@ -55,11 +56,18 @@ export type GalleryItem = {
   asset: AssetView
   jobId: string
   jobKind: Media.JobKind
+  /**
+   * The job's prompt, or for a voice clip the one line it speaks.
+   */
   prompt: string
   /**
    * For a video, the image to show before it plays.
    */
   poster: AssetView | null
+  /**
+   * How many results of the same job the gallery holds, this one included. Deleting the job takes them all.
+   */
+  jobResults: number
 }
 
 const assetViewColumns = pick(assetColumns, [
@@ -121,9 +129,14 @@ function coverOf(assets: AssetRow[], firstInput: AssetView | undefined) {
 }
 
 /**
- * Assets that can stand for a job or show in the gallery: everything but video frames and uploads.
+ * Assets that can stand for a job in a list: everything but video frames and uploads.
  */
 const COVER_ROLES: Media.AssetRole[] = ["output", "cutout", "still"]
+
+/**
+ * Assets the gallery shows: the results themselves, and their cutouts.
+ */
+const GALLERY_ROLES: Media.AssetRole[] = ["output", "cutout"]
 
 /**
  * The newest jobs with a cover each, for the studio's recent strip.
@@ -229,7 +242,7 @@ export async function readGallery(query: {
   favorites: boolean
 }): Promise<Pagination<GalleryItem>> {
   const filter = and(
-    inArray(schema.assets.role, ["output", "cutout"]),
+    inArray(schema.assets.role, GALLERY_ROLES),
     query.kind ? eq(schema.assets.kind, query.kind) : undefined,
     query.favorites ? eq(schema.assets.isFavorite, true) : undefined
   )
@@ -255,10 +268,23 @@ export async function readGallery(query: {
     GALLERY_PAGE_SIZE
   )
 
+  const jobIds = [...new Set(rows.map((row) => row.job.id))]
   const videoJobIds = [
     ...new Set(rows.filter((row) => row.asset.kind === "video").map((row) => row.job.id))
   ]
-  const [stills, firstInputs] = await Promise.all([
+  const [resultCounts, stills, firstInputs] = await Promise.all([
+    jobIds.length > 0
+      ? db
+          .select({ jobId: schema.assets.jobId, total: count() })
+          .from(schema.assets)
+          .where(
+            and(
+              inArray(schema.assets.jobId, jobIds),
+              inArray(schema.assets.role, GALLERY_ROLES)
+            )
+          )
+          .groupBy(schema.assets.jobId)
+      : [],
     videoJobIds.length > 0
       ? db
           .select(assetViewColumns)
@@ -273,16 +299,21 @@ export async function readGallery(query: {
     readFirstInputs(videoJobIds)
   ])
   const stillByJob = new Map(stills.map((still) => [still.jobId, toAssetView(still)]))
+  const resultsByJob = new Map(resultCounts.map((row) => [row.jobId, row.total]))
 
   const data = rows.map((row) => ({
     asset: toAssetView(row.asset),
     jobId: row.job.id,
     jobKind: row.job.kind,
-    prompt: row.job.prompt,
+    prompt:
+      row.asset.kind === "audio"
+        ? (scriptLines(row.job.prompt)[row.asset.position] ?? row.job.prompt)
+        : row.job.prompt,
     poster:
       row.asset.kind === "video"
         ? (stillByJob.get(row.job.id) ?? firstInputs.get(row.job.id) ?? null)
-        : null
+        : null,
+    jobResults: resultsByJob.get(row.job.id) ?? 1
   }))
 
   return toPagination(data, total, page, GALLERY_PAGE_SIZE)

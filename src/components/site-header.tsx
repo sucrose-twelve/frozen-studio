@@ -23,7 +23,7 @@ export function SiteHeader() {
               {APP_NAME}
             </span>
             <span className='text-muted block text-[10px] font-medium tracking-[0.18em] uppercase'>
-              Local · Media studio
+              Local AI · Media generator
             </span>
           </span>
         </NextLink>

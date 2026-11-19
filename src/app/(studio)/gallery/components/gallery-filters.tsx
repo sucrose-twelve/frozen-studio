@@ -13,7 +13,8 @@ type KindChoice = Media.AssetKind | "all"
 const KIND_OPTIONS: Option<KindChoice>[] = [
   { value: "all", label: "All" },
   { value: "image", label: "Images" },
-  { value: "video", label: "Videos" }
+  { value: "video", label: "Videos" },
+  { value: "audio", label: "Voice" }
 ]
 
 /**
@@ -38,7 +39,7 @@ export function GalleryFilters() {
 
   return (
     <div className='flex items-center gap-3'>
-      <div className='w-64'>
+      <div className='w-80'>
         <OptionGroup
           label='Kind'
           value={query.kind ?? "all"}

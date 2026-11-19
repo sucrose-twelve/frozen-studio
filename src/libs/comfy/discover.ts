@@ -1,5 +1,10 @@
 import { readComboOptions } from "./client"
 
+/**
+ * The part of `Engine.Models` that lives in ComfyUI. The voice engine is found by the worker itself.
+ */
+export type ComfyModels = Omit<Engine.Models, "voice">
+
 function pick(names: string[], ...patterns: RegExp[]) {
   for (const pattern of patterns) {
     const match = names.find((name) => pattern.test(name))
@@ -19,7 +24,7 @@ function pick(names: string[], ...patterns: RegExp[]) {
  *   Lightning LoRAs are optional and switch on the fast mode
  * - Cutout: any model in `models/background_removal`
  */
-export async function discoverModels(): Promise<Engine.Models> {
+export async function discoverModels(): Promise<ComfyModels> {
   const [diffusion, gguf, textEncoders, vaes, loras, backgroundRemoval] =
     await Promise.all([
       readComboOptions("UNETLoader", "unet_name"),

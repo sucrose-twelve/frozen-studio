@@ -4,7 +4,7 @@ import { asc, eq, inArray } from "drizzle-orm"
 import { z } from "zod"
 
 import { db, schema } from "@/drizzle"
-import { randomSeed, toImageParams, toVideoParams } from "@/libs/job"
+import { randomSeed, toImageParams, toVideoParams, toVoiceParams } from "@/libs/job"
 import { enqueueJobs, readEngineStatus } from "@/libs/queue"
 
 import { jobIdValidator, jobValidator } from "./validator.zod"
@@ -45,7 +45,7 @@ async function saveAndEnqueue(drafts: Draft[]) {
 }
 
 /**
- * Queues what a studio form asks for: one image or video job, or one cutout job per image.
+ * Queues what a studio form asks for: one image, video or voice job, or one cutout job per image.
  *
  * @param input - A form's values; see `jobValidator`
  * @returns The new job ids, field `errors` for an invalid form, or a `message` when the job can't run
@@ -61,7 +61,7 @@ export async function createJob(input: unknown) {
   }
 
   const data = parsed.data
-  const referenceIds = [...new Set(data.references)]
+  const referenceIds = "references" in data ? [...new Set(data.references)] : []
   if (referenceIds.length > 0) {
     const found = await db
       .select({ id: schema.assets.id, kind: schema.assets.kind })
@@ -121,6 +121,15 @@ export async function createJob(input: unknown) {
         references: [assetId]
       }))
       break
+    case "voice": {
+      const result = toVoiceParams(data, engine?.models ?? null)
+      if (!result.ok) return { ok: false as const, message: result.message }
+
+      drafts = [
+        { kind: "voice", prompt: data.prompt, params: result.params, references: [] }
+      ]
+      break
+    }
   }
 
   return { ok: true as const, ids: await saveAndEnqueue(drafts) }
@@ -164,5 +173,5 @@ export async function rerollJob(input: unknown) {
     }
   ])
 
-  return { ok: true as const, id: id! }
+  return { ok: true as const, id }
 }

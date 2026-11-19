@@ -1,15 +1,15 @@
 declare namespace Media {
-  export type JobKind = "image" | "video" | "cutout"
+  export type JobKind = "image" | "video" | "cutout" | "voice"
 
   export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "canceled"
 
-  export type AssetKind = "image" | "video"
+  export type AssetKind = "image" | "video" | "audio"
 
   /**
    * What an asset is to its job:
    *
    * - `upload`: a reference image the user added (no job made it)
-   * - `output`: the result itself, an image or a video
+   * - `output`: the result itself: an image, a video, or one spoken line
    * - `cutout`: an image with its background removed (transparent PNG)
    * - `frame`: one frame of a video, kept for sprite sheets
    * - `still`: the first frame a text-to-video job drew before animating it
@@ -71,12 +71,30 @@ declare namespace Media {
     kind: "cutout"
   }
 
-  export type JobParams = ImageParams | VideoParams | CutoutParams
+  /**
+   * A voice job speaks its prompt, one clip per line.
+   */
+  export type VoiceParams = {
+    kind: "voice"
+    model: string
+    /**
+     * The preset the description came from (`VOICE_PRESETS`), or `"custom"` when it was edited.
+     */
+    voice: string
+    /**
+     * What the model is told about the speaker, in English. This is what shapes the voice.
+     */
+    description: string
+    seed: number
+  }
+
+  export type JobParams = ImageParams | VideoParams | CutoutParams | VoiceParams
 }
 
 declare namespace Engine {
   /**
-   * The model files the worker found in ComfyUI, per job kind. `null` means that kind can't run yet.
+   * What the worker found installed, per job kind: model files in ComfyUI, and the text-to-speech engine
+   * beside this project. `null` means that kind can't run yet.
    */
   export type Models = {
     image: { models: string[]; textEncoder: string; vae: string } | null
@@ -89,6 +107,7 @@ declare namespace Engine {
       fastLowNoise: string | null
     } | null
     cutout: { model: string } | null
+    voice: { model: string } | null
   }
 
   /**

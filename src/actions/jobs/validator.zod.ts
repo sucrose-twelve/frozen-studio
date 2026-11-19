@@ -6,8 +6,11 @@ import {
   IMAGE_TIERS,
   MAX_REFERENCES,
   VIDEO_RESOLUTIONS,
-  VIDEO_SECONDS
+  VIDEO_SECONDS,
+  VOICE_MAX_LINE_LENGTH,
+  VOICE_MAX_LINES
 } from "@/constants"
+import { scriptLines } from "@/libs/job"
 
 /**
  * Seeds stay under 2^48 so they survive JSON and JavaScript numbers exactly. `null` asks for a random one.
@@ -75,10 +78,35 @@ export const cutoutValidator = z.object({
 
 export type CutoutValidator = z.infer<typeof cutoutValidator>
 
+export const voiceValidator = z.object({
+  kind: z.literal("voice"),
+  // The script: every non-empty line is spoken as its own clip
+  prompt: z
+    .string()
+    .trim()
+    .min(1, { error: "Write at least one line to speak" })
+    .refine((value) => scriptLines(value).length <= VOICE_MAX_LINES, {
+      error: `At most ${VOICE_MAX_LINES} lines per job`
+    })
+    .refine(
+      (value) => scriptLines(value).every((line) => line.length <= VOICE_MAX_LINE_LENGTH),
+      {
+        error: `Keep each line under ${VOICE_MAX_LINE_LENGTH} characters, or it gets cut off`
+      }
+    ),
+  // A preset's id, or "custom"
+  voice: z.string().min(1).max(40),
+  description: z.string().trim().min(1, { error: "Describe the voice" }).max(600),
+  seed
+})
+
+export type VoiceValidator = z.infer<typeof voiceValidator>
+
 export const jobValidator = z.discriminatedUnion("kind", [
   imageValidator,
   videoValidator,
-  cutoutValidator
+  cutoutValidator,
+  voiceValidator
 ])
 
 export type JobValidator = z.infer<typeof jobValidator>

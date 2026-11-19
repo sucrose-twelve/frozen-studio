@@ -16,11 +16,12 @@ queue / worker / ComfyUI engine, with one reference file per topic under `refere
 
 ## Project
 
-Frozen is a local media studio: a web UI that generates images and videos with the models
-ComfyUI has installed on this machine (text/image to image, text/image to video,
-background removal, sprite sheets). The Next.js app only reads and writes Postgres and
-Redis; a separate worker process is the one ComfyUI client. There is no sign-in, and the
-app listens on localhost only.
+Frozen is a local media studio: a web UI that generates images, videos and voice lines
+with models that run on this machine (text/image to image, text/image to video, background
+removal, sprite sheets, Japanese text to speech). The Next.js app only reads and writes
+Postgres and Redis; a separate worker process is the one client of the engines: ComfyUI,
+and the text-to-speech service in `tts/`. There is no sign-in, and the app listens on
+localhost only.
 
 ## Notes
 

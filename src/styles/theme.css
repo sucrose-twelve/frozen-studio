@@ -20,7 +20,7 @@
 
   --radius: 0.625rem;
 
-  --background: var(--night);
+  --background: color-mix(in oklab, var(--night) 90%, black);
   --foreground: color-mix(in oklab, var(--frost) 80%, white);
 
   --surface: color-mix(in oklab, var(--night) 82%, var(--steel));

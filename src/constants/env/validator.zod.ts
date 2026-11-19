@@ -29,6 +29,16 @@ export const redisSchema = z.object({
  * was started with (`--input-directory` / `--output-directory`): the worker hands it paths relative to them,
  * and the app reads the same files from disk.
  */
+/**
+ * The text-to-speech service the worker starts for voice jobs. Paths are relative to the project root; the
+ * defaults are where the README installs things.
+ */
+export const ttsSchema = z.object({
+  port: z.string().transform(Number).default(8191),
+  python: z.string().default("tts/.venv/Scripts/python.exe"),
+  modelDir: z.string().default("tts/models/japanese-parler-tts-mini")
+})
+
 export const comfySchema = z.object({
   url: z.url().default("http://127.0.0.1:8188"),
   inputDir: z.string().min(1),

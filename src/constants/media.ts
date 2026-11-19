@@ -1,13 +1,15 @@
 export const JOB_KINDS = [
   "image",
   "video",
-  "cutout"
+  "cutout",
+  "voice"
 ] as const satisfies readonly Media.JobKind[]
 
 export const JOB_KIND_LABELS: Record<Media.JobKind, string> = {
   image: "Image",
   video: "Video",
-  cutout: "Cutout"
+  cutout: "Cutout",
+  voice: "Voice"
 }
 
 export const JOB_STATUSES = [
@@ -119,6 +121,55 @@ export const VIDEO_SAMPLING = {
   fast: { steps: 4, cfg: 1 },
   full: { steps: 20, cfg: 3.5 }
 } as const
+
+/**
+ * A voice job speaks one clip per line of its script.
+ *
+ * The model stops at about 30 seconds of audio, which is roughly 160 Japanese characters at a normal pace;
+ * a longer line would be cut off mid-sentence.
+ */
+export const VOICE_MAX_LINES = 20
+export const VOICE_MAX_LINE_LENGTH = 160
+
+/**
+ * Voices to start from. Japanese Parler-TTS is steered by an English description of the speaker: pitch,
+ * pace, tone and how the recording sounds. "JSUT" names a speaker the model was trained on, which keeps
+ * the voice steadier from line to line than a description alone.
+ *
+ * The model only has female voices: a description that asks for a man lowers the pitch a little and
+ * nothing more, so there are no male presets.
+ */
+export const VOICE_PRESETS = [
+  {
+    id: "jsut",
+    label: "JSUT · steady",
+    description:
+      "JSUT speaks with an expressive and animated tone in an excellent recording, with a very close-sounding proximity that suggests a private and intimate setting, and delivers her words at a moderate pace."
+  },
+  {
+    id: "calm",
+    label: "Calm",
+    description:
+      "A female speaker with a slightly low-pitched voice delivers her words slowly with a calm and gentle tone in a very clear, close-sounding recording."
+  },
+  {
+    id: "bright",
+    label: "Bright",
+    description:
+      "A female speaker with a high-pitched voice delivers her words quickly with a very expressive and cheerful tone in a very clear, close-sounding recording."
+  },
+  {
+    id: "low",
+    label: "Low",
+    description:
+      "A female speaker with a very low-pitched voice delivers her words at a moderate pace with a serious, slightly monotone tone in a very clear, close-sounding recording."
+  }
+] as const
+
+/**
+ * The `voice` of a job whose description was written or edited by hand.
+ */
+export const VOICE_CUSTOM = "custom"
 
 /**
  * Reference images are re-encoded in the browser before upload: PNG, at most this many pixels on a side.

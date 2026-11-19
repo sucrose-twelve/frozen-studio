@@ -117,5 +117,6 @@ Only for responses that aren't UI:
 Next.js checks the installed version against npm's advisories. On an affected version, the
 first `next dev` or `next build` after `.next` is created stops with exit code 1 and an
 upgrade notice; the same command run again continues with a warning. Since `bun run build`
-deletes `.next` every time, it stops every time until Next.js is upgraded. Tell the owner
-and let them decide on the upgrade; don't run `next upgrade` unasked.
+deletes `.next` every time, it then stops every time until Next.js is upgraded (this
+happened on 16.4.3; the owner moved to 16.4.6). Tell the owner and let them decide on the
+upgrade; don't run `next upgrade` unasked.

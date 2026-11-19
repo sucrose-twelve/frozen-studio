@@ -142,6 +142,14 @@ export async function cancelPrompt(promptId: string) {
   await post("/interrupt", { prompt_id: promptId }).catch(() => null)
 }
 
+/**
+ * Asks ComfyUI to drop the models it holds in VRAM. It does so right away when idle, and loads them again
+ * on its next run.
+ */
+export async function freeComfyMemory() {
+  await post("/free", { unload_models: true, free_memory: true })
+}
+
 export function comfySocketUrl(clientId: string) {
   const url = new URL(COMFY.url)
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:"

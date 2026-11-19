@@ -1,7 +1,7 @@
 "use client"
 
 import { ToggleButton, ToggleButtonGroup } from "@heroui/react"
-import { ImageSparkles, Scissors, VideoSparkles } from "@keyline-icons/react"
+import { ImageSparkles, Mic, Scissors, VideoSparkles } from "@keyline-icons/react"
 import { useCallback, useEffect, useMemo } from "react"
 
 import { JOB_KIND_LABELS, JOB_KINDS } from "@/constants"
@@ -11,17 +11,19 @@ import { useStudioQuery } from "../hooks/use-studio-query"
 import { CutoutForm } from "./cutout-form"
 import { ImageForm } from "./image-form"
 import { VideoForm } from "./video-form"
+import { VoiceForm } from "./voice-form"
 
 const MODE_ICONS = {
   image: ImageSparkles,
   video: VideoSparkles,
-  cutout: Scissors
+  cutout: Scissors,
+  voice: Mic
 } satisfies Record<Media.JobKind, unknown>
 
 /**
- * The left panel: the mode switch and the three forms.
+ * The left panel: the mode switch and the four forms.
  *
- * All three stay mounted and only the chosen one shows, so switching modes never loses what was typed in
+ * All of them stay mounted and only the chosen one shows, so switching modes never loses what was typed in
  * the others. A prefill request from the canvas brings its form forward.
  */
 export function StudioForms() {
@@ -57,7 +59,7 @@ export function StudioForms() {
             const Icon = MODE_ICONS[kind]
 
             return (
-              <ToggleButton key={kind} id={kind} className='flex-1'>
+              <ToggleButton key={kind} id={kind} className='min-w-0 flex-1 px-2'>
                 {index > 0 ? <ToggleButtonGroup.Separator /> : null}
                 <Icon size={17} strokeWidth={1.75} />
                 {JOB_KIND_LABELS[kind]}
@@ -76,6 +78,9 @@ export function StudioForms() {
         </div>
         <div hidden={mode !== "cutout"} className='h-full'>
           <CutoutForm isActive={mode === "cutout"} />
+        </div>
+        <div hidden={mode !== "voice"} className='h-full'>
+          <VoiceForm isActive={mode === "voice"} />
         </div>
       </div>
     </aside>

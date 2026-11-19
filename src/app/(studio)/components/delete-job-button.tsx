@@ -10,17 +10,24 @@ import { deleteJob } from "@/actions/jobs/delete"
 import { useStudioQuery } from "../hooks/use-studio-query"
 
 /**
- * Deletes a job after asking, since its files go with it. The canvas then falls back to the newest job
- * that is left.
+ * Deletes a job after asking, since its files go with it. In the studio the canvas then falls back to the
+ * newest job that is left; in the gallery the job's tiles disappear.
  *
  * @param isLabeled - Spell out "Delete" next to the icon, for the states where the button stands alone
+ * @param resultCount - How many results the job has in the gallery, so the question can say that one click
+ *   removes several tiles
+ * @param className - Extra classes for the button, e.g. to make it readable on top of an image
  */
 export function DeleteJobButton({
   jobId,
-  isLabeled = false
+  isLabeled = false,
+  resultCount = 1,
+  className
 }: Readonly<{
   jobId: string
   isLabeled?: boolean
+  resultCount?: number
+  className?: string
 }>) {
   const router = useRouter()
   const { showJob } = useStudioQuery()
@@ -49,6 +56,7 @@ export function DeleteJobButton({
         size='sm'
         isIconOnly={!isLabeled}
         aria-label='Delete this job'
+        className={className}
         onPress={dialog.open}>
         <Bin size={15} strokeWidth={1.75} />
         {isLabeled ? "Delete" : null}
@@ -63,6 +71,9 @@ export function DeleteJobButton({
             </AlertDialog.Header>
             <AlertDialog.Body>
               <p>
+                {resultCount > 1
+                  ? `This job has ${resultCount} results here, and all of them go. `
+                  : null}
                 The job and every file it produced are deleted from disk. This can&apos;t
                 be undone. Reference images you uploaded are kept.
               </p>

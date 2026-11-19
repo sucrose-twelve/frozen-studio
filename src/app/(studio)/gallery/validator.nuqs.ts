@@ -5,7 +5,11 @@ import {
   parseAsStringLiteral
 } from "nuqs/server"
 
-const ASSET_KINDS = ["image", "video"] as const satisfies readonly Media.AssetKind[]
+const ASSET_KINDS = [
+  "image",
+  "video",
+  "audio"
+] as const satisfies readonly Media.AssetKind[]
 
 /**
  * Search param parsers, shared by the server cache below and the client filters (`GalleryFilters`).

@@ -6,12 +6,14 @@ imports only inside the same feature folder (e.g. a page importing its own
 
 ## Repo root
 
-| Folder    | Purpose                                                                                                                            |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `src/`    | The app and the worker (below)                                                                                                     |
-| `tests/`  | **Scripts**, not tests. The project has no automated tests; `tests/` plays the role of a `scripts/` folder (keep the name `tests`) |
-| `notes/`  | The owner's notes and plans                                                                                                        |
-| `public/` | Static files only. Never media                                                                                                     |
+| Folder      | Purpose                                                                                                                                                           |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/`      | The app and the worker (below)                                                                                                                                    |
+| `tts/`      | The text-to-speech service (Python): `server.py`, `requirements.txt`, `download_model.py`. Its `.venv/` and `models/` are not committed                           |
+| `tests/`    | **Scripts**, not tests. The project has no automated tests; `tests/` plays the role of a `scripts/` folder (keep the name `tests`)                                |
+| `launcher/` | `Frozen.ps1`, the one-click start (ComfyUI + app + worker, tray icon). Windows PowerShell 5.1, plain ASCII. Its `logs/` output and `frozen.ico` are not committed |
+| `notes/`    | The owner's notes and plans                                                                                                                                       |
+| `public/`   | Static files only. Never media                                                                                                                                    |
 
 `tests/` holds scripts run with bun from the repo root: the worker's entry
 (`tests/worker.spec.ts`, behind `bun run worker`), queue debugging
@@ -40,12 +42,12 @@ src/
 ├── constants/            Value lists + labels (media.ts), Redis keys and engine settings (engine.ts), metadata, fonts; env/
 ├── drizzle/              db client, schema/*.schema.ts, relations, types, table-columns, migrations, utils
 ├── hooks/                Shared client hooks, re-exported from hooks/index.ts
-├── libs/                 Framework-agnostic helpers: queue, redis, media, job, video-plan, upload, logger, utils
+├── libs/                 Framework-agnostic helpers: queue, redis, media, job, video-plan, upload, sprite-sheet, zip, logger, utils
 │   └── comfy/            ComfyUI HTTP client, model discovery, graphs/ (one workflow builder per job kind)
 ├── stores/<name>/        zustand store: state.ts (createXStore) + index.tsx (Provider + hook)
 ├── styles/               globals.css, theme.css (palette + HeroUI tokens), custom.css (@layer components)
 ├── types/                app.d.ts (helper types), schema.d.ts (the Media and Engine namespaces)
-└── worker/               The queue worker: index.ts (loop), process.ts (one job), engine.ts, comfy-socket.ts, gpu.ts
+└── worker/               The queue worker: index.ts (loop), process.ts (one job), voice.ts, engine.ts, comfy-socket.ts, gpu.ts
 ```
 
 `src/worker/` is not part of the Next.js bundle: it is a bun process started by

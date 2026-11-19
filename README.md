@@ -1,17 +1,16 @@
 # Frozen
 
-A local media studio: a web UI for generating images and videos with the models that
-ComfyUI has installed on this machine. Forms on the left, the result on the right, every
-result kept in a gallery.
+A local media studio: a web UI for generating images, videos and voice lines with models
+that run on this machine. Forms on the left, the result on the right, every result kept in
+a gallery.
 
-| Mode    | What it does                                                                                                                                          | Model          |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| Image   | Text to image, or an edit / mix of up to 4 reference images. Can also save a transparent cutout of the result                                         | Qwen-Image 2.1 |
-| Video   | Text to video, image to video, or a video through up to 6 keyframes (optionally looping). Frames can be saved, cut out, and built into a sprite sheet | Wan 2.2 I2V    |
-| Cutout  | Background removal for up to 12 images at once                                                                                                        | BiRefNet       |
-| Gallery | Every result, with favorites. A result can be rerolled, have its settings reused, or be sent on to another form                                       | —              |
-
-Text to speech is planned and not built yet.
+| Mode    | What it does                                                                                                                                                                                                                              | Model               |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| Image   | Text to image, or an edit / mix of up to 4 reference images. Can also save a transparent cutout of the result                                                                                                                             | Qwen-Image 2.1      |
+| Video   | Text to video, image to video, or a video through up to 6 keyframes (optionally looping). Frames can be saved, cut out, and built into a sprite sheet, exported as a zip (PNG sheet, a README with frame count and speed, a WebM preview) | Wan 2.2 I2V         |
+| Cutout  | Background removal for up to 12 images at once                                                                                                                                                                                            | BiRefNet            |
+| Voice   | Japanese text to speech: a script becomes one WAV clip per line, in a voice shaped by a description                                                                                                                                       | Japanese Parler-TTS |
+| Gallery | Every result, with favorites. A result can be rerolled, have its settings reused, or be sent on to another form                                                                                                                           | —                   |
 
 ## How it fits together
 
@@ -20,15 +19,20 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
    ▲            │  ▲
    │ SSE        │  └────── Redis       queue (list), engine status (key), events + control (pub/sub)
    └────────────┘             ▲
-                              │
-                           Worker ──► ComfyUI ──► files on disk
+                              │            ┌──► ComfyUI ──────────► images, videos
+                           Worker ─────────┤
+                                           └──► tts/server.py ────► voice clips
 ```
 
-- The **app** never talks to ComfyUI. Submitting a form validates it, writes a `jobs` row
-  and pushes the job id onto a Redis list.
-- The **worker** (`bun run worker`) is the only ComfyUI client. It takes one job at a time
-  (one GPU), builds the ComfyUI workflow for it, follows its progress over ComfyUI's
-  websocket, and records the files it produced as `assets` rows.
+- The **app** never talks to an engine. Submitting a form validates it, writes a `jobs`
+  row and pushes the job id onto a Redis list.
+- The **worker** (`bun run worker`) is the only client of the engines. It takes one job at
+  a time (one GPU), runs it, follows its progress, and records the files it produced as
+  `assets` rows.
+- Images, videos and cutouts run on **ComfyUI**, which is started separately. Voice runs
+  on a small **text-to-speech service** in `tts/`, which the worker starts itself when a
+  voice job arrives. The two share the GPU: whichever works next gets the VRAM the other
+  was holding.
 - Progress reaches the browser as Server-Sent Events: the worker publishes to Redis,
   `/api/events` relays it.
 - Media stays where ComfyUI puts it. Frozen writes into a `frozen/` subfolder of ComfyUI's
@@ -47,7 +51,10 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
   | Fast   | the `wan2.2_i2v_lightx2v` high- and low-noise LoRAs (optional: 4-step videos)                                 |
   | Cutout | any model in `models/background_removal`                                                                      |
 
-  A mode whose models are missing is disabled in the UI with a note saying what it needs.
+- For Voice (optional): [uv](https://docs.astral.sh/uv/) to set up its Python environment,
+  and about 10 GB of disk
+
+A mode whose models are missing is disabled in the UI with a note saying what it needs.
 
 ## Setup
 
@@ -61,14 +68,57 @@ bun run drizzle:migrate
 started with: the worker hands ComfyUI paths relative to them, and the app reads the same
 files from disk.
 
+### Voice (optional)
+
+The text-to-speech service has its own Python environment in `tts/.venv` and its model in
+`tts/models`; neither is committed. From the project root:
+
+```sh
+uv venv tts/.venv --python 3.12
+uv pip install --python tts/.venv/Scripts/python.exe torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+uv pip install --python tts/.venv/Scripts/python.exe -r tts/requirements.txt
+tts/.venv/Scripts/python.exe tts/download_model.py
+```
+
+That is about 3.3 GB of PyTorch (the CUDA 12.8 build, which RTX 50-series cards need), a
+few hundred MB of other packages, and a 3.5 GB model
+([2121-8/japanese-parler-tts-mini](https://huggingface.co/2121-8/japanese-parler-tts-mini)).
+Restart the worker afterwards; the Voice form unlocks once it sees the environment and the
+model in place. There is nothing to start by hand.
+
 ## Run
+
+### One click (Windows)
+
+`launcher/Frozen.ps1` starts everything and opens the app in the browser: ComfyUI without
+its desktop window, the app, and the worker. Put it on the Desktop once:
+
+```sh
+powershell -ExecutionPolicy Bypass -File launcher/Frozen.ps1 -InstallShortcut
+```
+
+Then double-click **Frozen**. It sits in the tray: right-click the icon to open the app or
+the logs folder, or to quit, which stops what it started. A ComfyUI that was already
+running is used as it is and left running. `launcher/Frozen.ps1 -Quit` does the same as
+the tray's "Quit Frozen", from a terminal.
+
+The app runs as a production build. The launcher builds it when there is no build yet or
+the code has changed since the last one, which adds about half a minute to that start;
+otherwise the app is up in a few seconds. If the build fails, it runs the dev server
+instead and says so. To get the dev server on purpose, where an edit shows without a
+restart, start it with `-Dev`.
+
+It finds ComfyUI through Comfy Desktop's settings, starts it with the folders from `.env`,
+and holds back VRAM for any other program that is using the card. Output goes to `logs/`.
+
+### By hand
 
 ```sh
 bun run dev              # the app on http://localhost:8190, and the worker
 ```
 
 Start ComfyUI first, or at any point: until it is up, the header says "ComfyUI offline"
-and jobs wait in the queue.
+and image, video and cutout jobs wait in the queue. Voice jobs don't need it.
 
 | Script                      | What it does                                             |
 | --------------------------- | -------------------------------------------------------- |
@@ -99,6 +149,8 @@ src/
 ├── stores/       The zustand store fed by the event stream
 ├── styles/       Theme (the four palette colours) and custom utilities
 └── worker/       The queue worker
+tts/              The text-to-speech service (Python): server.py, requirements.txt
+launcher/         Frozen.ps1: starts ComfyUI, the app and the worker in one click
 ```
 
 Conventions for the code live in `.claude/skills/web-stack/`.
@@ -109,5 +161,9 @@ Conventions for the code live in `.claude/skills/web-stack/`.
   shared memory and generation crawls. The header warns when another program holds VRAM.
 - **Long videos** are made in passes of up to 5 seconds. Each pass loads the high-noise
   and then the low-noise model, so the time grows with every pass.
+- **Voice.** The model speaks Japanese, with female voices only: asking for a man lowers
+  the pitch a little and nothing more. A line may be up to 160 characters, about the 30
+  seconds the model can speak in one go. The first job after an image or video job takes
+  longer, while the voice model loads back into VRAM.
 - **Deleting a job** deletes its files from disk. Uploaded reference images are kept.
 - **No sign-in.** The app listens on localhost only.

@@ -13,6 +13,7 @@ import { useStudioQuery } from "../hooks/use-studio-query"
 import { DeleteJobButton } from "./delete-job-button"
 import { JobProgress } from "./job-progress"
 import { JobResult } from "./job-result"
+import { VoiceResult } from "./voice-result"
 
 /**
  * A centred message on the canvas, for the states that have nothing to show.
@@ -74,8 +75,8 @@ export function JobCanvas({
         icon={<ImageSparkles size={40} strokeWidth={1.25} />}
         title='Nothing here yet'>
         <p className='text-muted text-sm'>
-          Describe an image or a video on the left and generate it. Results land here, and
-          stay in the gallery.
+          Describe an image, a video or a line of dialogue on the left and generate it.
+          Results land here, and stay in the gallery.
         </p>
       </Notice>
     )
@@ -122,6 +123,8 @@ export function JobCanvas({
       <Notice icon={<Spinner size='lg' color='current' />} title='Loading the result' />
     )
   }
+
+  if (job.kind === "voice") return <VoiceResult job={job} assetId={assetId} />
 
   return <JobResult job={job} assetId={assetId} />
 }

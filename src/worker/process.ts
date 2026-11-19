@@ -22,13 +22,18 @@ import { aspectRatioOf, videoSize } from "@/libs/video-plan"
 
 import { clientId, watchPrompt } from "./comfy-socket"
 import { currentModels } from "./engine"
+import { runVoiceJob, unloadVoiceModel } from "./voice"
 
 /**
- * The job being run, shared with the control listener so a cancel request can reach ComfyUI.
+ * The job being run, shared with the control listener so a cancel request can reach whatever runs it.
  */
 export type RunControl = {
   jobId: string
-  promptId: string | null
+  /**
+   * Stops the run. Set by the engine once there is something to stop; until then `isCanceled` is the
+   * only signal, and the engine checks it before it starts.
+   */
+  cancel: (() => Promise<void>) | null
   isCanceled: boolean
 }
 
@@ -98,14 +103,20 @@ async function collectAssets(
 }
 
 /**
- * Runs one job on ComfyUI and saves what it produced as assets. Status changes are the caller's.
+ * Runs one job and saves what it produced as assets: voice jobs on the text-to-speech service, everything
+ * else on ComfyUI. Status changes are the caller's.
  *
  * @param job - A job already marked `running`
- * @param control - Receives the ComfyUI prompt id once queued; a cancel that arrived earlier is honoured
+ * @param control - Receives the way to stop the run; a cancel that arrived earlier is honoured
  * @throws {CanceledError} When the run was canceled
- * @throws {Error} When a model is missing, ComfyUI rejects or fails the workflow, or nothing was written
+ * @throws {Error} When a model is missing, the engine rejects or fails the job, or nothing was written
  */
 export async function processJob(job: Job, control: RunControl) {
+  if (job.params.kind === "voice") return runVoiceJob(job, job.params, control)
+
+  // ComfyUI's models need the whole card, so the voice model gives its VRAM back first
+  await unloadVoiceModel()
+
   const inputs = await db
     .select(pick(assetColumns, ["id", "root", "path", "width", "height"]))
     .from(schema.jobInputs)
@@ -155,7 +166,7 @@ export async function processJob(job: Job, control: RunControl) {
   }
 
   const promptId = await queuePrompt(built.graph, clientId)
-  control.promptId = promptId
+  control.cancel = () => cancelPrompt(promptId)
   if (control.isCanceled) await cancelPrompt(promptId)
 
   let label = "Starting"

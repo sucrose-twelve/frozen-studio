@@ -27,7 +27,7 @@ export default async function Studio({ searchParams }: NextSearchParams) {
   const job = selected ?? (recent[0] ? await readJob(recent[0].id) : null)
 
   return (
-    <div className='max-w-9xl mx-auto grid grid-cols-1 gap-4 p-4 lg:h-[calc(100svh-4rem)] lg:grid-cols-[27rem_minmax(0,1fr)]'>
+    <div className='max-w-9xl mx-auto grid grid-cols-1 gap-4 p-4 lg:h-[calc(100svh-4rem)] lg:grid-cols-[30rem_minmax(0,1fr)]'>
       <StudioForms />
       <section className='use-panel flex min-h-[70svh] min-w-0 flex-col overflow-hidden lg:min-h-0'>
         <JobCanvas key={job?.id ?? "empty"} job={job} assetId={query.asset} />

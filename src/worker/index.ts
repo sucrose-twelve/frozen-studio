@@ -2,7 +2,6 @@ import { asc, eq } from "drizzle-orm"
 
 import { REDIS_KEYS } from "@/constants"
 import { db, schema } from "@/drizzle"
-import { cancelPrompt } from "@/libs/comfy/client"
 import { logger } from "@/libs/logger"
 import { publishEvent } from "@/libs/queue"
 import { redis, redisDedicated } from "@/libs/redis"
@@ -15,6 +14,7 @@ import {
   waitForComfy
 } from "./engine"
 import { processJob, type RunControl } from "./process"
+import { stopVoiceEngine } from "./voice"
 
 const STOPPED_MESSAGE = "Interrupted: the worker stopped while this job was running"
 
@@ -72,28 +72,31 @@ async function recover() {
  * Runs one job from the queue to its end, whatever that end is.
  *
  * A job that is no longer `queued` was canceled or deleted while it waited and is skipped. If ComfyUI isn't
- * up yet the job keeps waiting as `queued`, so it can still be canceled the cheap way.
+ * up yet the job keeps waiting as `queued`, so it can still be canceled the cheap way. Voice jobs don't
+ * run on ComfyUI and don't wait for it.
  */
 async function runJob(jobId: string) {
   let job = await readJob(jobId)
   if (job?.status !== "queued") return
 
-  await waitForComfy(
-    () =>
-      void publishEvent({
-        type: "progress",
-        id: jobId,
-        label: "Waiting for ComfyUI to start",
-        value: 0,
-        max: 0
-      })
-  )
+  if (job.kind !== "voice") {
+    await waitForComfy(
+      () =>
+        void publishEvent({
+          type: "progress",
+          id: jobId,
+          label: "Waiting for ComfyUI to start",
+          value: 0,
+          max: 0
+        })
+    )
 
-  job = await readJob(jobId)
-  if (job?.status !== "queued") return
+    job = await readJob(jobId)
+    if (job?.status !== "queued") return
+  }
 
   const startedAt = new Date()
-  const control: RunControl = { jobId, promptId: null, isCanceled: false }
+  const control: RunControl = { jobId, cancel: null, isCanceled: false }
   current = control
 
   await db
@@ -128,7 +131,7 @@ async function handleControl(message: string) {
   if (control.type !== "cancel" || current?.jobId !== control.id) return
 
   current.isCanceled = true
-  if (current.promptId) await cancelPrompt(current.promptId)
+  await current.cancel?.()
 }
 
 /**
@@ -163,9 +166,10 @@ export async function startWorker() {
     stopMonitor()
 
     if (current) {
-      if (current.promptId) await cancelPrompt(current.promptId)
+      await current.cancel?.().catch(() => undefined)
       await finishJob(current.jobId, "failed", STOPPED_MESSAGE).catch(() => undefined)
     }
+    stopVoiceEngine()
 
     const client = await redis()
     await client.del(REDIS_KEYS.engine).catch(() => undefined)
