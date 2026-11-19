@@ -69,12 +69,18 @@ two controls beside them. Use them; don't restyle per form.
 - `FormDivider` — the thick (2px) rule between zones.
 - `OptionGroup` — a typed row of buttons where exactly one is chosen. Use it for any short
   fixed set (quality, size, length); a `Select` is for a list that can grow (models).
+- `ModelSelect` — the first thing in a form whose kind has models to choose from: a
+  `Select` over what the engine reports, shown with a single model too and disabled
+  without any. Pair it with `useDefaultModel`, which keeps the form on an installed one.
 - `SubmitBar` — the sticky foot of a form: a summary of what will run, or the reason it
   can't (`blocker`), and the submit button.
 
 Buttons that act on one result live in `asset-buttons.tsx` (`DownloadButton`,
 `FavoriteButton`); `ResultActions` is the row under a result, and `DeleteJobButton` the
-delete with its confirmation.
+delete with its confirmation. A caption's result is text (`caption-result.tsx`): each
+piece has a copy button, and its prompts go to the Image or Video form as a `Prefill` with
+`prompt`, which changes the form's text and nothing else. Send a `Prefill` with
+`usePrefill`, not the store's `requestPrefill`: it also goes to the page the form is on.
 
 **Every setting is visible.** Don't tuck settings into a `Disclosure`, accordion or
 "Advanced" toggle: the owner asked for them to be shown outright, with the less-used ones
@@ -158,5 +164,6 @@ variants from those. So:
 
 Keyline (`@keyline-icons/react`), covered in [libraries.md](libraries.md#keyline-icons).
 Each mode has its icon, used wherever the mode is named: `ImageSparkles` (image),
-`VideoSparkles` (video), `Scissors` (cutout), `Mic` (voice). A voice clip, which has no
+`VideoSparkles` (video), `Scissors` (cutout), `Mic` (voice), `ScanText` (caption, which is
+a page in the header rather than a mode of the studio). A voice clip, which has no
 picture, is shown as `AudioLines`.

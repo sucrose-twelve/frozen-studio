@@ -20,9 +20,11 @@ import { assetFilePath, comfyImageName, mimeTypeOf, readPngFileSize } from "@/li
 import { publishEvent } from "@/libs/queue"
 import { aspectRatioOf, videoSize } from "@/libs/video-plan"
 
+import { runCaptionJob } from "./caption"
 import { clientId, watchPrompt } from "./comfy-socket"
 import { currentModels } from "./engine"
-import { runVoiceJob, unloadVoiceModel } from "./voice"
+import { claimGpu } from "./service"
+import { runVoiceJob } from "./voice"
 
 /**
  * The job being run, shared with the control listener so a cancel request can reach whatever runs it.
@@ -40,6 +42,14 @@ export type RunControl = {
 type Size = {
   width: number
   height: number
+}
+
+/**
+ * Whether a kind of job runs on ComfyUI. Voice and caption jobs have services of their own and don't need
+ * ComfyUI to be up.
+ */
+export function runsOnComfy(kind: Media.JobKind) {
+  return kind !== "voice" && kind !== "caption"
 }
 
 /**
@@ -103,8 +113,8 @@ async function collectAssets(
 }
 
 /**
- * Runs one job and saves what it produced as assets: voice jobs on the text-to-speech service, everything
- * else on ComfyUI. Status changes are the caller's.
+ * Runs one job and saves what it produced: voice jobs on the text-to-speech service, caption jobs on the
+ * captioning service, everything else on ComfyUI. Status changes are the caller's.
  *
  * @param job - A job already marked `running`
  * @param control - Receives the way to stop the run; a cancel that arrived earlier is honoured
@@ -113,9 +123,10 @@ async function collectAssets(
  */
 export async function processJob(job: Job, control: RunControl) {
   if (job.params.kind === "voice") return runVoiceJob(job, job.params, control)
+  if (job.params.kind === "caption") return runCaptionJob(job, job.params, control)
 
-  // ComfyUI's models need the whole card, so the voice model gives its VRAM back first
-  await unloadVoiceModel()
+  // ComfyUI's models need the whole card, so the services' models give their VRAM back first
+  await claimGpu()
 
   const inputs = await db
     .select(pick(assetColumns, ["id", "root", "path", "width", "height"]))

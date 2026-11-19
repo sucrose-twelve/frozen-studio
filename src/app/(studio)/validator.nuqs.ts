@@ -1,17 +1,17 @@
 import { createSearchParamsCache, parseAsString, parseAsStringLiteral } from "nuqs/server"
 
-import { JOB_KINDS } from "@/constants"
+import { STUDIO_MODES } from "@/constants"
 
 /**
  * Search param parsers, shared by the server cache below and the client hook (`useStudioQuery`) so both ends
  * read the URL the same way.
  *
- * - `mode`: which form is showing
+ * - `mode`: which of the studio's forms is showing. The Caption page reads the other two and ignores it
  * - `job`: the job on the canvas; without it the newest job is shown
  * - `asset`: which of that job's results to open on, for a link from the gallery
  */
 export const studioParsers = {
-  mode: parseAsStringLiteral(JOB_KINDS).withDefault("image"),
+  mode: parseAsStringLiteral(STUDIO_MODES).withDefault("image"),
   job: parseAsString,
   asset: parseAsString
 }

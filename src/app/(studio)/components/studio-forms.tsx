@@ -4,7 +4,7 @@ import { ToggleButton, ToggleButtonGroup } from "@heroui/react"
 import { ImageSparkles, Mic, Scissors, VideoSparkles } from "@keyline-icons/react"
 import { useCallback, useEffect, useMemo } from "react"
 
-import { JOB_KIND_LABELS, JOB_KINDS } from "@/constants"
+import { JOB_KIND_LABELS, STUDIO_MODES } from "@/constants"
 import { useStore } from "@/hooks"
 
 import { useStudioQuery } from "../hooks/use-studio-query"
@@ -18,13 +18,14 @@ const MODE_ICONS = {
   video: VideoSparkles,
   cutout: Scissors,
   voice: Mic
-} satisfies Record<Media.JobKind, unknown>
+} satisfies Record<Media.StudioMode, unknown>
 
 /**
  * The left panel: the mode switch and the four forms.
  *
  * All of them stay mounted and only the chosen one shows, so switching modes never loses what was typed in
- * the others. A prefill request from the canvas brings its form forward.
+ * the others. A prefill request from the canvas brings its form forward; one for the Caption form is that
+ * page's to answer.
  */
 export function StudioForms() {
   const { query, setMode } = useStudioQuery()
@@ -35,14 +36,14 @@ export function StudioForms() {
   const handleSelectionChange = useCallback(
     (keys: Set<string | number>) => {
       const [key] = keys
-      const next = JOB_KINDS.find((kind) => kind === key)
+      const next = STUDIO_MODES.find((kind) => kind === key)
       if (next) void setMode(next)
     },
     [setMode]
   )
 
   useEffect(() => {
-    if (prefill) void setMode(prefill.kind)
+    if (prefill && prefill.kind !== "caption") void setMode(prefill.kind)
   }, [prefill, setMode])
 
   return (
@@ -55,7 +56,7 @@ export function StudioForms() {
           disallowEmptySelection
           selectedKeys={selectedKeys}
           onSelectionChange={handleSelectionChange}>
-          {JOB_KINDS.map((kind, index) => {
+          {STUDIO_MODES.map((kind, index) => {
             const Icon = MODE_ICONS[kind]
 
             return (

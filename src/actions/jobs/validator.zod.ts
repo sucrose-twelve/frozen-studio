@@ -2,6 +2,9 @@ import { z } from "zod"
 
 import {
   ASPECTS,
+  CAPTION_MAX_PROMPT_LENGTH,
+  CAPTION_MODES,
+  CAPTION_STYLES,
   IMAGE_COUNTS,
   IMAGE_SAMPLERS,
   IMAGE_TIERS,
@@ -56,6 +59,7 @@ export type ImageValidator = z.infer<typeof imageValidator>
 
 export const videoValidator = z.object({
   kind: z.literal("video"),
+  model: z.string().min(1, { error: "Pick a model" }),
   prompt,
   references: z.array(z.uuid()).max(MAX_REFERENCES.video),
   seconds: literals(VIDEO_SECONDS),
@@ -87,6 +91,7 @@ export type CutoutValidator = z.infer<typeof cutoutValidator>
 
 export const voiceValidator = z.object({
   kind: z.literal("voice"),
+  model: z.string().min(1, { error: "Pick a model" }),
   // The script: every non-empty line is spoken as its own clip
   prompt: z
     .string()
@@ -109,11 +114,33 @@ export const voiceValidator = z.object({
 
 export type VoiceValidator = z.infer<typeof voiceValidator>
 
+export const captionValidator = z
+  .object({
+    kind: z.literal("caption"),
+    model: z.string().min(1, { error: "Pick a model" }),
+    // What the model is told about the image: optional guidance for prompts, the question for an answer
+    prompt: z.string().trim().max(CAPTION_MAX_PROMPT_LENGTH),
+    // One job per image
+    references: z
+      .array(z.uuid())
+      .min(1, { error: "Add at least one image" })
+      .max(MAX_REFERENCES.caption),
+    mode: z.enum(CAPTION_MODES),
+    style: z.enum(CAPTION_STYLES)
+  })
+  .refine((value) => value.mode !== "answer" || value.prompt.length > 0, {
+    error: "Write what the model should answer",
+    path: ["prompt"]
+  })
+
+export type CaptionValidator = z.infer<typeof captionValidator>
+
 export const jobValidator = z.discriminatedUnion("kind", [
   imageValidator,
   videoValidator,
   cutoutValidator,
-  voiceValidator
+  voiceValidator,
+  captionValidator
 ])
 
 export type JobValidator = z.infer<typeof jobValidator>

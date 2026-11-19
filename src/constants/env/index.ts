@@ -1,7 +1,14 @@
 import * as dotenv from "dotenv"
 import { z } from "zod"
 
-import { comfySchema, dbSchema, envSchema, redisSchema, ttsSchema } from "./validator.zod"
+import {
+  captionSchema,
+  comfySchema,
+  dbSchema,
+  envSchema,
+  redisSchema,
+  ttsSchema
+} from "./validator.zod"
 
 dotenv.config({ quiet: true })
 
@@ -10,6 +17,7 @@ export type DatabaseSchema = z.infer<typeof dbSchema>
 export type RedisSchema = z.infer<typeof redisSchema>
 export type ComfySchema = z.infer<typeof comfySchema>
 export type TtsSchema = z.infer<typeof ttsSchema>
+export type CaptionSchema = z.infer<typeof captionSchema>
 
 export const ENV = envSchema.parse({
   APP_MODE: process.env.NODE_ENV ?? process.env.NEXT_PUBLIC_APP_MODE,
@@ -43,6 +51,12 @@ export const TTS = ttsSchema.parse({
   port: process.env.TTS_PORT,
   python: process.env.TTS_PYTHON,
   modelDir: process.env.TTS_MODEL_DIR
+})
+
+export const CAPTION = captionSchema.parse({
+  port: process.env.CAPTION_PORT,
+  python: process.env.CAPTION_PYTHON,
+  modelDir: process.env.CAPTION_MODEL_DIR
 })
 
 export const DATABASE_URL = `postgresql://${DB.user}:${DB.password}@${DB.host}:${DB.port}/${DB.name}`

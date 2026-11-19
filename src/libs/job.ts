@@ -1,4 +1,5 @@
 import type {
+  CaptionValidator,
   ImageValidator,
   VideoValidator,
   VoiceValidator
@@ -51,28 +52,61 @@ export function scriptLines(script: string) {
  * Turns a validated voice form into the parameters stored with the job.
  *
  * @param models - What the engine has installed, or `null` when the worker hasn't reported
- * @returns The parameters, or a `message` when the voice engine isn't installed
+ * @returns The parameters, or a `message` when the voice engine or the chosen model isn't installed
  */
 export function toVoiceParams(
   input: VoiceValidator,
   models: Engine.Models | null
 ): { ok: true; params: Media.VoiceParams } | { ok: false; message: string } {
-  const model = models?.voice?.model
-  if (!model) {
+  if (!models?.voice) {
     return {
       ok: false,
       message: "The voice engine isn't installed, or the worker isn't running."
     }
+  }
+  if (!models.voice.models.includes(input.model)) {
+    return { ok: false, message: "That voice model isn't installed any more." }
   }
 
   return {
     ok: true,
     params: {
       kind: "voice",
-      model,
+      model: input.model,
       voice: input.voice,
       description: input.description,
       seed: input.seed ?? randomSeed()
+    }
+  }
+}
+
+/**
+ * Turns a validated caption form into the parameters stored with each of its jobs.
+ *
+ * @param models - What the engine has installed, or `null` when the worker hasn't reported
+ * @returns The parameters, or a `message` when the caption engine or the chosen model isn't installed
+ */
+export function toCaptionParams(
+  input: CaptionValidator,
+  models: Engine.Models | null
+): { ok: true; params: Media.CaptionParams } | { ok: false; message: string } {
+  if (!models?.caption) {
+    return {
+      ok: false,
+      message: "The caption engine isn't installed, or the worker isn't running."
+    }
+  }
+  if (!models.caption.models.includes(input.model)) {
+    return { ok: false, message: "That caption model isn't installed any more." }
+  }
+
+  return {
+    ok: true,
+    params: {
+      kind: "caption",
+      model: input.model,
+      mode: input.mode,
+      style: input.style
     }
   }
 }
@@ -92,6 +126,11 @@ export function toVideoParams(
   input: VideoValidator,
   models: Engine.Models | null
 ): { ok: true; params: Media.VideoParams } | { ok: false; message: string } {
+  // With the worker offline the list is unknown, and the job waits in the queue either way
+  if (models?.video && !models.video.models.some((pair) => pair.name === input.model)) {
+    return { ok: false, message: "That video model isn't installed any more." }
+  }
+
   const isTextToVideo = input.references.length === 0
   const imageModel = models?.image?.models[0] ?? null
   if (isTextToVideo && !imageModel) {
@@ -112,6 +151,7 @@ export function toVideoParams(
     ok: true,
     params: {
       kind: "video",
+      model: input.model,
       seconds: input.seconds,
       resolution: input.resolution,
       aspect: input.aspect,

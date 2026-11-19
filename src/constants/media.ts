@@ -2,14 +2,26 @@ export const JOB_KINDS = [
   "image",
   "video",
   "cutout",
-  "voice"
+  "voice",
+  "caption"
 ] as const satisfies readonly Media.JobKind[]
+
+/**
+ * The kinds on the studio page's mode switch, in its order. Caption is in the header instead.
+ */
+export const STUDIO_MODES = [
+  "image",
+  "video",
+  "cutout",
+  "voice"
+] as const satisfies readonly Media.StudioMode[]
 
 export const JOB_KIND_LABELS: Record<Media.JobKind, string> = {
   image: "Image",
   video: "Video",
   cutout: "Cutout",
-  voice: "Voice"
+  voice: "Voice",
+  caption: "Caption"
 }
 
 export const JOB_STATUSES = [
@@ -115,7 +127,7 @@ export const IMAGE_DEFAULTS = {
   tier: "standard"
 } as const satisfies Partial<Media.ImageParams>
 
-export const MAX_REFERENCES = { image: 4, video: 6, cutout: 12 } as const
+export const MAX_REFERENCES = { image: 4, video: 6, cutout: 12, caption: 8 } as const
 
 export const VIDEO_SECONDS = [1, 2, 3, 5, 10, 15, 20] as const
 
@@ -202,6 +214,28 @@ export const VOICE_PRESETS = [
  * The `voice` of a job whose description was written or edited by hand.
  */
 export const VOICE_CUSTOM = "custom"
+
+export const CAPTION_MODES = [
+  "prompts",
+  "answer"
+] as const satisfies readonly Media.CaptionMode[]
+
+export const CAPTION_MODE_LABELS: Record<Media.CaptionMode, string> = {
+  prompts: "Prompts",
+  answer: "Answer"
+}
+
+export const CAPTION_STYLES = [
+  "prose",
+  "tags"
+] as const satisfies readonly Media.CaptionStyle[]
+
+export const CAPTION_STYLE_LABELS: Record<Media.CaptionStyle, string> = {
+  prose: "Sentences",
+  tags: "Tags"
+}
+
+export const CAPTION_MAX_PROMPT_LENGTH = 2_000
 
 /**
  * Reference images are re-encoded in the browser before upload: PNG, at most this many pixels on a side.

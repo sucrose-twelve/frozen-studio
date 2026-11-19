@@ -41,6 +41,12 @@ export function buildVideoGraph(input: {
   const video = models.video
   if (!video) throw new Error("The video models aren't installed in ComfyUI")
 
+  // A job from before there was a choice names no model and runs on the first pair
+  const model = params.model
+    ? video.models.find((pair) => pair.name === params.model)
+    : video.models[0]
+  if (!model) throw new Error(`The video model ${params.model} isn't installed any more`)
+
   const builder = new GraphBuilder()
 
   let keyframes: NodeRef[]
@@ -79,12 +85,12 @@ export function buildVideoGraph(input: {
   const isFast = params.isFast && !!video.fastHighNoise && !!video.fastLowNoise
   let highNoise = builder.add(
     "UnetLoaderGGUF",
-    { unet_name: video.highNoise },
+    { unet_name: model.highNoise },
     "Loading the video model (motion)"
   )
   let lowNoise = builder.add(
     "UnetLoaderGGUF",
-    { unet_name: video.lowNoise },
+    { unet_name: model.lowNoise },
     "Loading the video model (detail)"
   )
   if (isFast) {

@@ -10,6 +10,7 @@ import { ACTIVE_JOB_STATUSES } from "@/constants"
 import { useStore } from "@/hooks"
 
 import { useStudioQuery } from "../hooks/use-studio-query"
+import { CaptionResult } from "./caption-result"
 import { DeleteJobButton } from "./delete-job-button"
 import { JobProgress } from "./job-progress"
 import { JobResult } from "./job-result"
@@ -75,8 +76,8 @@ export function JobCanvas({
         icon={<ImageSparkles size={40} strokeWidth={1.25} />}
         title='Nothing here yet'>
         <p className='text-muted text-sm'>
-          Describe an image, a video or a line of dialogue on the left and generate it.
-          Results land here, and stay in the gallery.
+          Fill in the form on the left and run it. Results land here, and the ones that
+          are pictures, videos or sound stay in the gallery.
         </p>
       </Notice>
     )
@@ -125,6 +126,7 @@ export function JobCanvas({
   }
 
   if (job.kind === "voice") return <VoiceResult job={job} assetId={assetId} />
+  if (job.kind === "caption") return <CaptionResult job={job} />
 
   return <JobResult job={job} assetId={assetId} />
 }

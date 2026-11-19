@@ -4,8 +4,9 @@ Frozen's text-to-speech service: Japanese Parler-TTS behind a small local HTTP A
 The queue worker starts this process when a voice job arrives and is its only client. It listens on
 127.0.0.1 and writes files only under --output-root.
 
-    GET  /health    {"status": "ok", "loaded": false, "device": null}
-    POST /generate  {"lines": [{"text": "...", "file": "<path>.wav"}], "description": "...", "seed": 1}
+    GET  /health    {"status": "ok", "loaded": false, "model": null, "device": null}
+    POST /generate  {"model": "<folder name>", "lines": [{"text": "...", "file": "<path>.wav"}],
+                     "description": "...", "seed": 1}
                     answers with one JSON object per line, as things happen:
                         {"event": "loading"}
                         {"event": "line", "index": 0}
@@ -13,8 +14,9 @@ The queue worker starts this process when a voice job arrives and is its only cl
                         {"event": "done"}  or  {"event": "error", "message": "..."}
     POST /unload    frees the model, and with it the VRAM, until the next /generate
 
-The model and everything heavy (torch, transformers) load on the first /generate, so the process starts
-at once and holds no VRAM while nobody is using it.
+A model is a folder under --models-root, named in each request. It loads, with everything heavy (torch,
+transformers), on the first /generate that asks for it, so the process starts at once and holds no VRAM
+while nobody is using it. One model is held at a time: asking for another drops the one in memory first.
 
 The worker passes its own process id (--parent-pid). When that process is gone, the service exits rather
 than linger with the model in VRAM.
@@ -39,10 +41,12 @@ def log(message):
 
 
 class Voice:
-    """The model and its two tokenizers, loaded on first use."""
+    """The model in use and its two tokenizers: loaded on first use, and swapped when another is asked for."""
 
-    def __init__(self, model_dir):
-        self.model_dir = model_dir
+    def __init__(self, models_root):
+        self.models_root = models_root
+        # The folder name of the model in memory
+        self.name = None
         self.model = None
         self.device = None
         self.prompt_tokenizer = None
@@ -56,10 +60,23 @@ class Voice:
     def is_loaded(self):
         return self.model is not None
 
-    def load(self):
-        if self.is_loaded:
+    def folder(self, name):
+        """
+        The folder of a model, by name. Models are the folders directly under the models root, so a name
+        that is a path, or that names nothing there, is refused.
+        """
+        path = os.path.join(self.models_root, name)
+        if name in ("", ".", "..") or os.path.basename(name) != name or not os.path.isdir(path):
+            raise ValueError(f"no model named {name!r}")
+        return path
+
+    def load(self, name):
+        if self.is_loaded and self.name == name:
             return
 
+        # One model at a time
+        self.unload()
+        model_dir = self.folder(name)
         started = time.monotonic()
         import torch
         from parler_tts import ParlerTTSForConditionalGeneration
@@ -69,16 +86,17 @@ class Voice:
         # This model has its own tokenizers, one for the spoken text and one for the voice description;
         # the ones Parler-TTS ships with don't fit it
         self.prompt_tokenizer = AutoTokenizer.from_pretrained(
-            self.model_dir, subfolder="prompt_tokenizer", local_files_only=True
+            model_dir, subfolder="prompt_tokenizer", local_files_only=True
         )
         self.description_tokenizer = AutoTokenizer.from_pretrained(
-            self.model_dir, subfolder="description_tokenizer", local_files_only=True
+            model_dir, subfolder="description_tokenizer", local_files_only=True
         )
         self.model = ParlerTTSForConditionalGeneration.from_pretrained(
-            self.model_dir, local_files_only=True
+            model_dir, local_files_only=True
         ).to(self.device)
         self.model.eval()
-        log(f"model loaded on {self.device} in {time.monotonic() - started:.1f}s")
+        self.name = name
+        log(f"{name} loaded on {self.device} in {time.monotonic() - started:.1f}s")
 
     def unload(self):
         if not self.is_loaded:
@@ -86,11 +104,12 @@ class Voice:
 
         import torch
 
+        log(f"{self.name} unloaded")
         self.model = None
+        self.name = None
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        log("model unloaded")
 
     def add_ruby(self, text):
         """
@@ -194,7 +213,13 @@ def make_handler(voice, output_root):
                 return self.send_json(404, {"message": "Not found"})
 
             self.send_json(
-                200, {"status": "ok", "loaded": voice.is_loaded, "device": voice.device}
+                200,
+                {
+                    "status": "ok",
+                    "loaded": voice.is_loaded,
+                    "model": voice.name,
+                    "device": voice.device,
+                },
             )
 
         def do_POST(self):
@@ -210,6 +235,8 @@ def make_handler(voice, output_root):
         def generate(self):
             try:
                 body = self.read_json()
+                model = str(body["model"])
+                voice.folder(model)
                 lines = body["lines"]
                 description = str(body["description"])
                 seed = int(body["seed"])
@@ -233,9 +260,9 @@ def make_handler(voice, output_root):
 
             try:
                 with voice.lock:
-                    if not voice.is_loaded:
+                    if voice.name != model:
                         emit({"event": "loading"})
-                        voice.load()
+                        voice.load(model)
 
                     import soundfile
 
@@ -308,7 +335,9 @@ def exit_with_parent(parent_pid):
 def main():
     parser = argparse.ArgumentParser(description="Frozen's text-to-speech service")
     parser.add_argument("--port", type=int, default=8191)
-    parser.add_argument("--model-dir", required=True, help="Folder with the model's files")
+    parser.add_argument(
+        "--models-root", required=True, help="Folder with one folder per model inside"
+    )
     parser.add_argument("--output-root", required=True, help="Files may only be written under here")
     parser.add_argument(
         "--parent-pid",
@@ -317,7 +346,7 @@ def main():
     )
     args = parser.parse_args()
 
-    voice = Voice(os.path.abspath(args.model_dir))
+    voice = Voice(os.path.abspath(args.models_root))
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(voice, args.output_root))
     if args.parent_pid:
         threading.Thread(target=exit_with_parent, args=(args.parent_pid,), daemon=True).start()

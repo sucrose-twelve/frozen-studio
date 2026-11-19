@@ -21,6 +21,7 @@ import {
 import { useEngine, useStore } from "@/hooks"
 import { aspectRatioOf, countFrames, planSegments, videoSize } from "@/libs/video-plan"
 
+import { useDefaultModel } from "../hooks/use-default-model"
 import { useStudioQuery } from "../hooks/use-studio-query"
 import { parseSeed, VIDEO_FORM_DEFAULTS } from "../utils"
 import {
@@ -30,6 +31,7 @@ import {
   FormSection,
   SwitchField
 } from "./form-parts"
+import { ModelSelect } from "./model-select"
 import { OptionGroup, type Option } from "./option-group"
 import { ReferencePicker } from "./reference-picker"
 import { SubmitBar } from "./submit-bar"
@@ -98,7 +100,15 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
     ]
   })
 
+  const model = useWatch({ control: form.control, name: "model" })
+
   const models = engine?.models
+  const videoModels = models?.video?.models
+  const modelNames = useMemo(() => videoModels?.map((pair) => pair.name), [videoModels])
+  const modelOptions = useMemo(
+    () => (modelNames ?? []).map((name) => ({ id: name, label: name })),
+    [modelNames]
+  )
   const hasFastModels = !!models?.video?.fastHighNoise && !!models.video.fastLowNoise
   // Fast mode as the job will actually run it: asked for, and the LoRAs are there
   const isFastRun = isFast && hasFastModels
@@ -129,6 +139,10 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
           ? "Text to video needs the image model for its first frame. Add an image instead."
           : null
 
+  const handleModelChange = useCallback(
+    (value: string) => form.setValue("model", value),
+    [form]
+  )
   const handleReferencesChange = useCallback(
     (assets: AssetView[]) => {
       setReferences(assets)
@@ -203,14 +217,27 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
     [form, showJob]
   )
 
+  useDefaultModel(modelNames, model, handleModelChange)
+
   // A result sent here from the canvas: its settings, its images, or both
   useEffect(() => {
     if (prefill?.kind !== "video") return
+
+    // Prompts sent over from a caption: only the text changes
+    if (prefill.prompt) {
+      form.setValue("prompt", prefill.prompt.positive, { shouldValidate: true })
+      if (prefill.prompt.negative !== undefined) {
+        form.setValue("negative", prefill.prompt.negative)
+      }
+      return
+    }
 
     const params = prefill.source?.params
     if (prefill.source && params?.kind === "video") {
       form.reset({
         ...VIDEO_FORM_DEFAULTS,
+        // An older job names no model; the form's own stays, or the first one is picked for it
+        model: params.model ?? form.getValues("model"),
         prompt: prefill.source.prompt,
         seconds: params.seconds as VideoValidator["seconds"],
         resolution: params.resolution,
@@ -247,7 +274,14 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
 
   return (
     <form onSubmit={handleSubmit} className='flex min-h-full flex-col gap-5'>
-      <FormSection title='Prompt' note='Wan 2.2'>
+      <ModelSelect
+        label='Video model'
+        models={modelOptions}
+        value={model}
+        onChange={handleModelChange}
+      />
+
+      <FormSection title='Prompt'>
         <TextArea
           aria-label='Prompt'
           fullWidth

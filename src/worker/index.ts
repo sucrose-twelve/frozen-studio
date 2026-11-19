@@ -13,8 +13,8 @@ import {
   startEngineMonitor,
   waitForComfy
 } from "./engine"
-import { processJob, type RunControl } from "./process"
-import { stopVoiceEngine } from "./voice"
+import { processJob, runsOnComfy, type RunControl } from "./process"
+import { stopServices } from "./service"
 
 const STOPPED_MESSAGE = "Interrupted: the worker stopped while this job was running"
 
@@ -72,14 +72,14 @@ async function recover() {
  * Runs one job from the queue to its end, whatever that end is.
  *
  * A job that is no longer `queued` was canceled or deleted while it waited and is skipped. If ComfyUI isn't
- * up yet the job keeps waiting as `queued`, so it can still be canceled the cheap way. Voice jobs don't
- * run on ComfyUI and don't wait for it.
+ * up yet the job keeps waiting as `queued`, so it can still be canceled the cheap way. Voice and caption
+ * jobs don't run on ComfyUI and don't wait for it.
  */
 async function runJob(jobId: string) {
   let job = await readJob(jobId)
   if (job?.status !== "queued") return
 
-  if (job.kind !== "voice") {
+  if (runsOnComfy(job.kind)) {
     await waitForComfy(
       () =>
         void publishEvent({
@@ -135,7 +135,7 @@ async function handleControl(message: string) {
 }
 
 /**
- * The worker: takes jobs off the Redis queue one at a time (one GPU, one job) and runs them on ComfyUI,
+ * The worker: takes jobs off the Redis queue one at a time (one GPU, one job) and runs them on their engine,
  * while reporting its status and listening for cancel requests. Runs until the process is stopped.
  */
 export async function startWorker() {
@@ -169,7 +169,7 @@ export async function startWorker() {
       await current.cancel?.().catch(() => undefined)
       await finishJob(current.jobId, "failed", STOPPED_MESSAGE).catch(() => undefined)
     }
-    stopVoiceEngine()
+    stopServices()
 
     const client = await redis()
     await client.del(REDIS_KEYS.engine).catch(() => undefined)

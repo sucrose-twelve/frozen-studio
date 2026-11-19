@@ -1,0 +1,14 @@
+# The captioning service (caption/server.py), for Python 3.12.
+#
+# PyTorch goes in first, from its own index, so the CUDA build is the one installed:
+#
+#   uv pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
+#
+# then this file:
+#
+#   uv pip install -r caption/requirements.txt
+#
+# It has an environment of its own because Ministral 3 needs transformers 5, while the text-to-speech
+# service is held on transformers 4 by parler-tts. torchvision is what the model's image processor runs on.
+transformers>=5,<6
+pillow

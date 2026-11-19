@@ -15,7 +15,7 @@ import {
 import { sharedTimestampColumns } from "../utils"
 
 /**
- * One generation request. The worker takes it from the Redis queue, runs it on ComfyUI and records how it
+ * One generation request. The worker takes it from the Redis queue, runs it on its engine and records how it
  * ended here.
  */
 export const jobs = pgTable.withRLS(
@@ -30,6 +30,8 @@ export const jobs = pgTable.withRLS(
     prompt: text("prompt").notNull().default(""),
     params: jsonb("params").notNull().$type<Media.JobParams>(),
     error: text("error"),
+    // What a job wrote when that is text rather than files: a caption job's description and prompts
+    result: jsonb("result").$type<Media.Caption>(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     ...sharedTimestampColumns

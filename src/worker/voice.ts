@@ -1,4 +1,3 @@
-import { spawn, spawnSync, type ChildProcess } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 
@@ -6,13 +5,12 @@ import { MEDIA_FOLDER } from "@/constants"
 import { COMFY, TTS } from "@/constants/env"
 import { db, schema } from "@/drizzle"
 import type { AssetInsertValues, Job } from "@/drizzle/types"
-import { freeComfyMemory, isComfyOnline } from "@/libs/comfy/client"
 import { scriptLines } from "@/libs/job"
-import { logger } from "@/libs/logger"
 import { publishEvent } from "@/libs/queue"
 
 import { CanceledError } from "./comfy-socket"
 import type { RunControl } from "./process"
+import { claimGpu, createPythonService, findModelFolders } from "./service"
 
 /**
  * What the text-to-speech service streams back while it works on a request (see `tts/server.py`).
@@ -25,184 +23,49 @@ type VoiceEvent =
   | { event: "error"; message: string }
 
 const SERVER_SCRIPT = "tts/server.py"
-const BASE_URL = `http://127.0.0.1:${TTS.port}`
+
+const service = createPythonService({
+  name: "voice",
+  python: TTS.python,
+  script: SERVER_SCRIPT,
+  port: TTS.port,
+  args: [
+    "--models-root",
+    path.dirname(path.resolve(TTS.modelDir)),
+    "--output-root",
+    path.resolve(COMFY.outputDir, MEDIA_FOLDER)
+  ]
+})
 
 /**
- * Starting the service only starts Python; the model loads with the first request. Half a minute is far
- * more than that takes, and short enough to notice a broken install.
+ * The voice models that can run, by folder name, the default one first. Empty when the engine isn't
+ * installed (its Python environment, the service script, at least one model), which disables the Voice
+ * form.
+ *
+ * A voice model is a folder with weights and the two tokenizers the service loads, which is what the
+ * Japanese Parler-TTS models ship with.
  */
-const START_TIMEOUT_MS = 30_000
-
-/**
- * ComfyUI drops its models within moments of being asked. The pause gives the VRAM time to actually come
- * back before the voice model asks for it.
- */
-const VRAM_HANDOVER_MS = 1_500
-
-let service: ChildProcess | null = null
-// The last lines the service printed, to explain a start that failed
-let recentOutput: string[] = []
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-/**
- * The voice model's name when the engine is installed: its Python environment, the service script and the
- * model's weights are all in place. `null` otherwise, which disables the Voice form.
- */
-export function findVoiceModel() {
-  const modelDir = path.resolve(TTS.modelDir)
-  const hasWeights = ["model.safetensors", "pytorch_model.bin"].some((name) =>
-    fs.existsSync(path.join(modelDir, name))
-  )
+export function findVoiceModels() {
   const isInstalled =
-    hasWeights &&
-    fs.existsSync(path.resolve(TTS.python)) &&
-    fs.existsSync(path.resolve(SERVER_SCRIPT))
+    fs.existsSync(path.resolve(TTS.python)) && fs.existsSync(path.resolve(SERVER_SCRIPT))
+  if (!isInstalled) return []
 
-  return isInstalled ? path.basename(modelDir) : null
-}
-
-async function readHealth() {
-  try {
-    const response = await fetch(`${BASE_URL}/health`, {
-      signal: AbortSignal.timeout(1_500)
-    })
-    return response.ok ? ((await response.json()) as { loaded: boolean }) : null
-  } catch {
-    return null
-  }
-}
-
-/**
- * Stops the service at once, mid-sentence if need be. This is also how a running voice job is canceled.
- *
- * On Windows the environment's `python.exe` is a small launcher that runs the real interpreter as its
- * child, so killing it alone would leave the interpreter behind with the model in VRAM. `taskkill /T`
- * takes the whole tree.
- */
-export function stopVoiceEngine() {
-  if (!service) return
-
-  if (process.platform === "win32" && service.pid) {
-    spawnSync("taskkill", ["/PID", String(service.pid), "/T", "/F"], {
-      windowsHide: true
-    })
-  } else {
-    service.kill()
-  }
-  service = null
-}
-
-/**
- * Makes sure the service is up, starting it when it isn't. One that is already answering (started by hand,
- * say) is used as it is.
- *
- * @throws {Error} When it doesn't come up, with what it printed
- */
-async function startVoiceEngine() {
-  if (await readHealth()) return
-
-  recentOutput = []
-  const started = spawn(
-    path.resolve(TTS.python),
-    [
-      path.resolve(SERVER_SCRIPT),
-      "--port",
-      String(TTS.port),
-      "--model-dir",
-      path.resolve(TTS.modelDir),
-      "--output-root",
-      path.resolve(COMFY.outputDir, MEDIA_FOLDER),
-      // The service watches this process and exits with it, so it can't outlive the worker
-      "--parent-pid",
-      String(process.pid)
-    ],
-    {
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, PYTHONUTF8: "1", PYTHONUNBUFFERED: "1" },
-      windowsHide: true
-    }
+  return findModelFolders(
+    TTS.modelDir,
+    (folder) =>
+      ["model.safetensors", "pytorch_model.bin"].some((name) =>
+        fs.existsSync(path.join(folder, name))
+      ) &&
+      fs.existsSync(path.join(folder, "prompt_tokenizer")) &&
+      fs.existsSync(path.join(folder, "description_tokenizer"))
   )
-  service = started
-
-  const remember = (chunk: Buffer) => {
-    const lines = chunk.toString("utf8").split(/\r?\n/).filter(Boolean)
-    recentOutput = [...recentOutput, ...lines].slice(-20)
-  }
-  started.stdout?.on("data", remember)
-  started.stderr?.on("data", remember)
-  started.on("error", (error) => remember(Buffer.from(error.message)))
-  started.on("exit", () => {
-    if (service === started) service = null
-  })
-
-  const deadline = Date.now() + START_TIMEOUT_MS
-  while (Date.now() < deadline && service === started) {
-    if (await readHealth()) {
-      logger("Voice engine started")
-      return
-    }
-    await delay(300)
-  }
-
-  stopVoiceEngine()
-  throw new Error(
-    ["The voice engine didn't start.", ...recentOutput].join("\n").slice(0, 2_000)
-  )
-}
-
-/**
- * Has the voice model let go of its VRAM, if the service is up and holding it. Called before a ComfyUI job:
- * the image and video models need the whole card.
- */
-export async function unloadVoiceModel() {
-  const health = await readHealth()
-  if (!health?.loaded) return
-
-  await fetch(`${BASE_URL}/unload`, {
-    method: "POST",
-    signal: AbortSignal.timeout(30_000)
-  }).catch(() => undefined)
-}
-
-/**
- * Sends a request to the service and yields its events as they arrive, one JSON object per line.
- */
-async function* speak(body: unknown): AsyncGenerator<VoiceEvent> {
-  const response = await fetch(`${BASE_URL}/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  })
-  if (!response.ok || !response.body) {
-    const answer = (await response.json().catch(() => null)) as {
-      message?: string
-    } | null
-    throw new Error(answer?.message ?? `The voice engine answered ${response.status}`)
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffered = ""
-
-  while (true) {
-    const { value, done } = await reader.read()
-    if (done) break
-
-    buffered += decoder.decode(value, { stream: true })
-    const lines = buffered.split("\n")
-    buffered = lines.pop() ?? ""
-    for (const line of lines) {
-      if (line.trim()) yield JSON.parse(line) as VoiceEvent
-    }
-  }
 }
 
 /**
  * Runs a voice job: speaks every line of its script into its own WAV file and saves them as assets.
  *
- * ComfyUI is asked to drop its models first. The two engines share one GPU, and whichever works next
- * gets the VRAM the other was holding.
+ * The other engines drop their models first. They share one GPU, and whichever works next gets the VRAM
+ * the others were holding.
  *
  * @param job - A voice job already marked `running`
  * @param control - Gets a way to stop the run; a cancel that arrived earlier is honoured
@@ -222,15 +85,13 @@ export async function runVoiceJob(
       () => undefined
     )
 
-  control.cancel = async () => stopVoiceEngine()
+  // Stopping the service is how a running voice job is canceled
+  control.cancel = async () => service.stop()
   if (control.isCanceled) throw new CanceledError()
 
   report("Starting the voice engine")
-  if (await isComfyOnline()) {
-    await freeComfyMemory().catch(() => undefined)
-    await delay(VRAM_HANDOVER_MS)
-  }
-  await startVoiceEngine()
+  await claimGpu(service)
+  await service.start()
   if (control.isCanceled) throw new CanceledError()
 
   const folder = path.resolve(COMFY.outputDir, MEDIA_FOLDER, job.id)
@@ -238,7 +99,8 @@ export async function runVoiceJob(
   const saved: AssetInsertValues[] = []
 
   try {
-    const events = speak({
+    const events = service.stream<VoiceEvent>("/generate", {
+      model: params.model,
       lines: lines.map((text, index) => ({
         text,
         file: path.join(folder, files[index])

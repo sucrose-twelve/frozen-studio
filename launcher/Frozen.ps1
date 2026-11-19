@@ -4,7 +4,7 @@
 #
 #   - ComfyUI, headless (no Comfy Desktop window), unless it is already running
 #   - the app on http://localhost:8190, unless it is already running
-#   - the queue worker, which also starts the voice service when a voice job needs it
+#   - the queue worker, which also starts the voice and caption services when a job needs them
 #
 # The app runs as a production build (`start:prod`). The build is made here when there is none, or when the
 # code has changed since the last one, which adds about half a minute to that start. If the build fails,

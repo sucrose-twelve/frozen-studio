@@ -42,6 +42,10 @@ export type JobDetail = {
   prompt: string
   params: Media.JobParams
   error: string | null
+  /**
+   * What a caption job wrote; `null` for every other kind, and until the job has finished.
+   */
+  result: Media.Caption | null
   createdAt: number
   startedAt: number | null
   finishedAt: number | null
@@ -139,12 +143,18 @@ const COVER_ROLES: Media.AssetRole[] = ["output", "cutout", "still"]
 const GALLERY_ROLES: Media.AssetRole[] = ["output", "cutout"]
 
 /**
- * The newest jobs with a cover each, for the studio's recent strip.
+ * The newest jobs with a cover each, for a page's recent strip.
+ *
+ * @param kinds - The kinds that page shows: the studio's modes, or captions on their own page
  */
-export async function readRecentJobs(limit = RECENT_JOBS): Promise<JobSummary[]> {
+export async function readRecentJobs(
+  kinds: readonly Media.JobKind[],
+  limit = RECENT_JOBS
+): Promise<JobSummary[]> {
   const jobs = await db
     .select(pick(jobColumns, ["id", "kind", "status", "prompt", "createdAt"]))
     .from(schema.jobs)
+    .where(inArray(schema.jobs.kind, [...kinds]))
     .orderBy(desc(schema.jobs.createdAt))
     .limit(limit)
   if (jobs.length === 0) return []
@@ -203,6 +213,7 @@ export async function readJob(id: string): Promise<JobDetail | null> {
     prompt: job.prompt,
     params: job.params,
     error: job.error,
+    result: job.result,
     createdAt: job.createdAt.getTime(),
     startedAt: job.startedAt?.getTime() ?? null,
     finishedAt: job.finishedAt?.getTime() ?? null,

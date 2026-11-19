@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { readJob, readRecentJobs } from "@/actions/jobs/read"
+import { STUDIO_MODES } from "@/constants"
 
 import { JobCanvas } from "./components/job-canvas"
 import { RecentStrip } from "./components/recent-strip"
@@ -20,7 +21,7 @@ export default async function Studio({ searchParams }: NextSearchParams) {
   const jobId = z.uuid().safeParse(query.job).success ? query.job : null
 
   const [recent, selected] = await Promise.all([
-    readRecentJobs(),
+    readRecentJobs(STUDIO_MODES),
     jobId ? readJob(jobId) : null
   ])
   // Only when nothing is selected, since it needs the first id of the list

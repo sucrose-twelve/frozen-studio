@@ -28,6 +28,10 @@ next-env.d.ts
 /tts/models/
 __pycache__/
 
+# image captioning: the same two things
+/caption/.venv/
+/caption/models/
+
 # the launcher's logs and the icon it draws for the Desktop shortcut
 /logs/
 /launcher/frozen.ico

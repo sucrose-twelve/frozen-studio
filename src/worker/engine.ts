@@ -5,8 +5,9 @@ import { logger } from "@/libs/logger"
 import { readEngineStatus, writeEngineStatus } from "@/libs/queue"
 import { redis } from "@/libs/redis"
 
+import { findCaptionModels } from "./caption"
 import { readVramUsers } from "./gpu"
-import { findVoiceModel } from "./voice"
+import { findVoiceModels } from "./voice"
 
 const NO_COMFY_MODELS: ComfyModels = { image: null, video: null, cutout: null }
 
@@ -54,12 +55,18 @@ export async function isAnotherWorkerRunning() {
 }
 
 /**
- * Everything that can run right now: what ComfyUI has, and the voice engine, which is installed beside
- * this project and doesn't need ComfyUI at all.
+ * Everything that can run right now: what ComfyUI has, and the voice and caption engines, which are
+ * installed beside this project and don't need ComfyUI at all.
  */
 function allModels(): Engine.Models {
-  const voice = findVoiceModel()
-  return { ...state.models, voice: voice ? { model: voice } : null }
+  const voice = findVoiceModels()
+  const caption = findCaptionModels()
+
+  return {
+    ...state.models,
+    voice: voice.length > 0 ? { models: voice } : null,
+    caption: caption.length > 0 ? { models: caption } : null
+  }
 }
 
 /**

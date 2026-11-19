@@ -1,8 +1,8 @@
 # Frozen
 
-A local media studio: a web UI for generating images, videos and voice lines with models
-that run on this machine. Forms on the left, the result on the right, every result kept in
-a gallery.
+A local media studio: a web UI for generating images, videos and voice lines, and for
+describing images, with models that run on this machine. Forms on the left, the result on
+the right, every result kept in a gallery.
 
 | Mode    | What it does                                                                                                                                                                                                                              | Model               |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
@@ -10,6 +10,7 @@ a gallery.
 | Video   | Text to video, image to video, or a video through up to 6 keyframes (optionally looping). Frames can be saved, cut out, and built into a sprite sheet, exported as a zip (PNG sheet, a README with frame count and speed, a WebM preview) | Wan 2.2 I2V         |
 | Cutout  | Background removal for up to 12 images at once                                                                                                                                                                                            | BiRefNet            |
 | Voice   | Japanese text to speech: a script becomes one WAV clip per line, in a voice shaped by a description                                                                                                                                       | Japanese Parler-TTS |
+| Caption | Image and text to text: a detailed description of each image with a positive and a negative prompt that ask for it again, or an answer to whatever the prompt asks about it. The text can be sent on to the Image or Video form           | Ministral 3 8B      |
 | Gallery | Every result, with favorites. A result can be rerolled, have its settings reused, or be sent on to another form                                                                                                                           | —                   |
 
 ## How it fits together
@@ -20,8 +21,8 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
    │ SSE        │  └────── Redis       queue (list), engine status (key), events + control (pub/sub)
    └────────────┘             ▲
                               │            ┌──► ComfyUI ──────────► images, videos
-                           Worker ─────────┤
-                                           └──► tts/server.py ────► voice clips
+                           Worker ─────────┼──► tts/server.py ────► voice clips
+                                           └──► caption/server.py ► descriptions and prompts
 ```
 
 - The **app** never talks to an engine. Submitting a form validates it, writes a `jobs`
@@ -30,9 +31,9 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
   a time (one GPU), runs it, follows its progress, and records the files it produced as
   `assets` rows.
 - Images, videos and cutouts run on **ComfyUI**, which is started separately. Voice runs
-  on a small **text-to-speech service** in `tts/`, which the worker starts itself when a
-  voice job arrives. The two share the GPU: whichever works next gets the VRAM the other
-  was holding.
+  on a small **text-to-speech service** in `tts/` and captions on a **captioning service**
+  in `caption/`; the worker starts each itself when a job needs it. They all share the
+  GPU: whichever works next gets the VRAM the others were holding.
 - Progress reaches the browser as Server-Sent Events: the worker publishes to Redis,
   `/api/events` relays it.
 - Media stays where ComfyUI puts it. Frozen writes into a `frozen/` subfolder of ComfyUI's
@@ -53,6 +54,8 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
 
 - For Voice (optional): [uv](https://docs.astral.sh/uv/) to set up its Python environment,
   and about 10 GB of disk
+- For Caption (optional): uv again, about 16 GB of disk, and a card with 12 GB of VRAM or
+  more
 
 A mode whose models are missing is disabled in the UI with a note saying what it needs.
 
@@ -85,6 +88,28 @@ few hundred MB of other packages, and a 3.5 GB model
 ([2121-8/japanese-parler-tts-mini](https://huggingface.co/2121-8/japanese-parler-tts-mini)).
 Restart the worker afterwards; the Voice form unlocks once it sees the environment and the
 model in place. There is nothing to start by hand.
+
+### Caption (optional)
+
+The captioning service is set up the same way, in `caption/.venv` and `caption/models`:
+
+```sh
+uv venv caption/.venv --python 3.12
+uv pip install --python caption/.venv/Scripts/python.exe torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
+uv pip install --python caption/.venv/Scripts/python.exe -r caption/requirements.txt
+caption/.venv/Scripts/python.exe caption/download_model.py
+```
+
+PyTorch comes from uv's cache when Voice was set up first; the model is 11.8 GB
+([Felldude/Ministral-3-8B-Uncensored-FP8](https://huggingface.co/Felldude/Ministral-3-8B-Uncensored-FP8)).
+Restart the worker afterwards.
+
+Other vision-language models can sit beside it: every folder under `caption/models` with a
+`config.json` and `.safetensors` weights is offered in the Caption form's Model list, and
+`caption/download_model.py <repository>` fetches one from Hugging Face.
+`CAPTION_MODEL_DIR` only says which one the form starts on. Anything transformers loads as
+an image-text-to-text model works, as long as it fits the card: weights stored in FP8 stay
+in FP8, everything else loads at 16 bits, so a full-precision 8B model needs about 18 GB.
 
 ## Run
 
@@ -150,6 +175,7 @@ src/
 ├── styles/       Theme (the four palette colours) and custom utilities
 └── worker/       The queue worker
 tts/              The text-to-speech service (Python): server.py, requirements.txt
+caption/          The captioning service (Python): server.py, requirements.txt
 launcher/         Frozen.ps1: starts ComfyUI, the app and the worker in one click
 ```
 
@@ -168,5 +194,14 @@ Conventions for the code live in `.claude/skills/web-stack/`.
   the pitch a little and nothing more. A line may be up to 160 characters, about the 30
   seconds the model can speak in one go. The first job after an image or video job takes
   longer, while the voice model loads back into VRAM.
+- **Caption.** A caption takes about a minute: half of it is the model loading, which the
+  next caption in a row doesn't pay again. The description and the positive prompt are
+  read from the image; the negative prompt can't be, and is the model's advice for that
+  kind of image. Captions are text, so they are kept on the Caption page, in its recent
+  strip, and not in the gallery.
+- **Models.** The Image, Video, Voice and Caption forms each start with a Model list of
+  what is installed for them: the Qwen-Image files and the Wan 2.2 high/low pairs ComfyUI
+  has, and the model folders under `tts/models` and `caption/models`. Nothing needs
+  editing in `.env` to switch.
 - **Deleting a job** deletes its files from disk. Uploaded reference images are kept.
 - **No sign-in.** The app listens on localhost only.

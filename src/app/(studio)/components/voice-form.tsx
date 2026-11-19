@@ -12,9 +12,11 @@ import { VOICE_CUSTOM, VOICE_MAX_LINES, VOICE_PRESETS } from "@/constants"
 import { useEngine, useStore } from "@/hooks"
 import { scriptLines } from "@/libs/job"
 
+import { useDefaultModel } from "../hooks/use-default-model"
 import { useStudioQuery } from "../hooks/use-studio-query"
 import { parseSeed, VOICE_FORM_DEFAULTS, voiceLabel } from "../utils"
 import { FieldMessage, FieldRow, FormDivider, FormSection } from "./form-parts"
+import { ModelSelect } from "./model-select"
 import { SubmitBar } from "./submit-bar"
 
 const VOICE_OPTIONS = [
@@ -41,10 +43,16 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
     defaultValues: VOICE_FORM_DEFAULTS
   })
   const { errors, isSubmitting } = form.formState
-  const [prompt, voice, seed] = useWatch({
+  const [model, prompt, voice, seed] = useWatch({
     control: form.control,
-    name: ["prompt", "voice", "seed"]
+    name: ["model", "prompt", "voice", "seed"]
   })
+
+  const models = engine?.models.voice?.models
+  const modelOptions = useMemo(
+    () => (models ?? []).map((name) => ({ id: name, label: name })),
+    [models]
+  )
 
   const lineCount = useMemo(() => scriptLines(prompt).length, [prompt])
   const blocker = !engine
@@ -57,6 +65,10 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
       ? "Every line of the script becomes its own clip."
       : `${lineCount} ${lineCount === 1 ? "clip" : "clips"} · ${voiceLabel(voice)}`
 
+  const handleModelChange = useCallback(
+    (value: string) => form.setValue("model", value),
+    [form]
+  )
   // Typing in the description makes the voice the user's own, whichever preset it started from
   const handleDescriptionChange = useCallback(
     () => form.setValue("voice", VOICE_CUSTOM),
@@ -97,13 +109,16 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
     [form, showJob]
   )
 
-  // "Reuse settings" on a voice result: its script, voice and seed
+  useDefaultModel(models, model, handleModelChange)
+
+  // "Reuse settings" on a voice result: its model, script, voice and seed
   useEffect(() => {
     const source = prefill?.kind === "voice" ? prefill.source : null
     if (source?.params.kind !== "voice") return
 
     form.reset({
       kind: "voice",
+      model: source.params.model,
       prompt: source.prompt,
       voice: source.params.voice,
       description: source.params.description,
@@ -124,6 +139,13 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
 
   return (
     <form onSubmit={handleSubmit} className='flex min-h-full flex-col gap-5'>
+      <ModelSelect
+        label='Voice model'
+        models={modelOptions}
+        value={model}
+        onChange={handleModelChange}
+      />
+
       <FormSection
         title='Script'
         note={`${lineCount} / ${VOICE_MAX_LINES} lines · Japanese`}>
@@ -142,7 +164,7 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
         <FieldMessage message={errors.prompt?.message} />
       </FormSection>
 
-      <FormSection title='Voice' note='Japanese Parler-TTS'>
+      <FormSection title='Voice'>
         <Select
           aria-label='Voice'
           fullWidth

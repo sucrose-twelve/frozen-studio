@@ -1,4 +1,5 @@
 import type {
+  CaptionValidator,
   ImageValidator,
   VideoValidator,
   VoiceValidator
@@ -23,6 +24,7 @@ export const IMAGE_FORM_DEFAULTS: ImageValidator = {
 
 export const VIDEO_FORM_DEFAULTS: VideoValidator = {
   kind: "video",
+  model: "",
   prompt: "",
   references: [],
   seconds: 5,
@@ -40,10 +42,20 @@ export const VIDEO_FORM_DEFAULTS: VideoValidator = {
 
 export const VOICE_FORM_DEFAULTS: VoiceValidator = {
   kind: "voice",
+  model: "",
   prompt: "",
   voice: VOICE_PRESETS[0].id,
   description: VOICE_PRESETS[0].description,
   seed: null
+}
+
+export const CAPTION_FORM_DEFAULTS: CaptionValidator = {
+  kind: "caption",
+  model: "",
+  prompt: "",
+  references: [],
+  mode: "prompts",
+  style: "prose"
 }
 
 /**

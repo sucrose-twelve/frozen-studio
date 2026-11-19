@@ -4,7 +4,13 @@ import { asc, eq, inArray } from "drizzle-orm"
 import { z } from "zod"
 
 import { db, schema } from "@/drizzle"
-import { randomSeed, toImageParams, toVideoParams, toVoiceParams } from "@/libs/job"
+import {
+  randomSeed,
+  toCaptionParams,
+  toImageParams,
+  toVideoParams,
+  toVoiceParams
+} from "@/libs/job"
 import { enqueueJobs, readEngineStatus } from "@/libs/queue"
 
 import { jobIdValidator, jobValidator } from "./validator.zod"
@@ -45,7 +51,8 @@ async function saveAndEnqueue(drafts: Draft[]) {
 }
 
 /**
- * Queues what a studio form asks for: one image, video or voice job, or one cutout job per image.
+ * Queues what a studio form asks for: one image, video or voice job, or one cutout or caption job per
+ * image.
  *
  * @param input - A form's values; see `jobValidator`
  * @returns The new job ids, field `errors` for an invalid form, or a `message` when the job can't run
@@ -130,6 +137,18 @@ export async function createJob(input: unknown) {
       ]
       break
     }
+    case "caption": {
+      const result = toCaptionParams(data, engine?.models ?? null)
+      if (!result.ok) return { ok: false as const, message: result.message }
+
+      drafts = data.references.map((assetId) => ({
+        kind: "caption",
+        prompt: data.prompt,
+        params: result.params,
+        references: [assetId]
+      }))
+      break
+    }
   }
 
   return { ok: true as const, ids: await saveAndEnqueue(drafts) }
@@ -137,6 +156,7 @@ export async function createJob(input: unknown) {
 
 /**
  * Queues a copy of a job with a new seed: the same prompt, settings and references, a different roll.
+ * Cutout and caption jobs have no seed, and run again as they were.
  *
  * @param input - `{ id }` of the job to repeat
  * @returns The new job's id, or a `message` when the job is gone
@@ -162,8 +182,7 @@ export async function rerollJob(input: unknown) {
     .where(eq(schema.jobInputs.jobId, parsed.data.id))
     .orderBy(asc(schema.jobInputs.position))
 
-  const params =
-    job.params.kind === "cutout" ? job.params : { ...job.params, seed: randomSeed() }
+  const params = "seed" in job.params ? { ...job.params, seed: randomSeed() } : job.params
   const [id] = await saveAndEnqueue([
     {
       kind: job.kind,

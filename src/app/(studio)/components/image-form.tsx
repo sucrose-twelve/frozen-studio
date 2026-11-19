@@ -1,14 +1,6 @@
 "use client"
 
-import {
-  Input,
-  Label,
-  ListBox,
-  NumberField,
-  Select,
-  TextArea,
-  toast
-} from "@heroui/react"
+import { Input, Label, NumberField, TextArea, toast } from "@heroui/react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { ImageSparkles } from "@keyline-icons/react"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -31,6 +23,7 @@ import {
 } from "@/constants"
 import { useEngine, useStore } from "@/hooks"
 
+import { useDefaultModel } from "../hooks/use-default-model"
 import { useStudioQuery } from "../hooks/use-studio-query"
 import { IMAGE_FORM_DEFAULTS, modelLabel, parseSeed } from "../utils"
 import {
@@ -40,6 +33,7 @@ import {
   FormSection,
   SwitchField
 } from "./form-parts"
+import { ModelSelect } from "./model-select"
 import { OptionGroup, type Option } from "./option-group"
 import { ReferencePicker } from "./reference-picker"
 import { SubmitBar } from "./submit-bar"
@@ -102,6 +96,10 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
 
   const models = engine?.models.image?.models
   const firstModel = models?.[0]
+  const modelOptions = useMemo(
+    () => (models ?? []).map((name) => ({ id: name, label: modelLabel(name) })),
+    [models]
+  )
   const hasCutoutModel = !!engine?.models.cutout
   const hasReferences = references.length > 0
 
@@ -142,9 +140,7 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
   )
 
   const handleModelChange = useCallback(
-    (key: unknown) => {
-      if (typeof key === "string") form.setValue("model", key)
-    },
+    (value: string) => form.setValue("model", value),
     [form]
   )
   const handleAspectChange = useCallback(
@@ -207,17 +203,20 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
     [form, showJob]
   )
 
-  // The model list arrives with the engine's status, after the form has mounted
-  useEffect(() => {
-    if (!firstModel) return
-
-    const current = form.getValues("model")
-    if (!current || !models?.includes(current)) form.setValue("model", firstModel)
-  }, [firstModel, models, form])
+  useDefaultModel(models, model, handleModelChange)
 
   // A result sent here from the canvas: its settings, its images, or both
   useEffect(() => {
     if (prefill?.kind !== "image") return
+
+    // Prompts sent over from a caption: only the text changes
+    if (prefill.prompt) {
+      form.setValue("prompt", prefill.prompt.positive, { shouldValidate: true })
+      if (prefill.prompt.negative !== undefined) {
+        form.setValue("negative", prefill.prompt.negative)
+      }
+      return
+    }
 
     const params = prefill.source?.params
     if (prefill.source && params?.kind === "image") {
@@ -260,35 +259,14 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
 
   return (
     <form onSubmit={handleSubmit} className='flex min-h-full flex-col gap-5'>
-      {models && models.length > 1 ? (
-        <FormSection title='Model'>
-          <Select
-            aria-label='Image model'
-            fullWidth
-            variant='secondary'
-            value={model}
-            onChange={handleModelChange}>
-            <Select.Trigger>
-              <Select.Value />
-              <Select.Indicator />
-            </Select.Trigger>
-            <Select.Popover>
-              <ListBox>
-                {models.map((name) => (
-                  <ListBox.Item key={name} id={name} textValue={modelLabel(name)}>
-                    {modelLabel(name)}
-                    <ListBox.ItemIndicator />
-                  </ListBox.Item>
-                ))}
-              </ListBox>
-            </Select.Popover>
-          </Select>
-        </FormSection>
-      ) : null}
+      <ModelSelect
+        label='Image model'
+        models={modelOptions}
+        value={model}
+        onChange={handleModelChange}
+      />
 
-      <FormSection
-        title='Prompt'
-        note={firstModel ? modelLabel(model || firstModel) : null}>
+      <FormSection title='Prompt'>
         <TextArea
           aria-label='Prompt'
           fullWidth

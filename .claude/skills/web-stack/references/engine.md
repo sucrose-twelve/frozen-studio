@@ -1,4 +1,4 @@
-# The engine — jobs, queue, worker, ComfyUI, voice
+# The engine — jobs, queue, worker, ComfyUI, voice, caption
 
 ```
 Browser ──► Next.js app ──► Postgres   jobs, assets, job_inputs
@@ -6,8 +6,8 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job_inputs
    │ SSE        │  └────── Redis       frozen:queue · frozen:engine · frozen:events · frozen:control
    └────────────┘             ▲
                               │            ┌──► ComfyUI ──────────► images, videos
-                           Worker ─────────┤
-                                           └──► tts/server.py ────► voice clips
+                           Worker ─────────┼──► tts/server.py ────► voice clips
+                                           └──► caption/server.py ► descriptions and prompts
 ```
 
 Two processes share this repo:
@@ -18,13 +18,15 @@ Two processes share this repo:
   client of the engines. It runs one job at a time: one GPU, and the models don't fit side
   by side.
 
-And two engines do the generating:
+And three engines do the generating:
 
 - **ComfyUI**, for image, video and cutout jobs. It is a separate program, started by hand
   or by `launcher/Frozen.ps1`; the worker waits for it and never starts or stops it.
 - The **voice service** (`tts/server.py`), for voice jobs. It belongs to this project: the
   worker starts it when the first voice job arrives and stops it when it exits. See
   [the voice engine](#the-voice-engine).
+- The **captioning service** (`caption/server.py`), for caption jobs, owned by the worker
+  in the same way. See [the caption engine](#the-caption-engine).
 
 There is exactly one worker. A second one refuses to start while the first is alive (it
 watches whether the status in Redis keeps getting newer), since it would run a second job
@@ -52,13 +54,13 @@ App code uses `@/libs/queue` (`enqueueJobs`, `dequeueJobs`, `requestCancel`,
 
 ## A job's life
 
-| Status      | Set by | When                                                            |
-| ----------- | ------ | --------------------------------------------------------------- |
-| `queued`    | app    | `createJob` / `rerollJob` wrote the row                         |
-| `running`   | worker | It took the id off the queue and the job's engine is up         |
-| `succeeded` | worker | The engine finished and the files became `assets` rows          |
-| `failed`    | worker | Anything threw; the message is in `jobs.error`                  |
-| `canceled`  | either | The app (still queued) or the worker (running, after interrupt) |
+| Status      | Set by | When                                                                              |
+| ----------- | ------ | --------------------------------------------------------------------------------- |
+| `queued`    | app    | `createJob` / `rerollJob` wrote the row                                           |
+| `running`   | worker | It took the id off the queue and the job's engine is up                           |
+| `succeeded` | worker | The engine finished and the files became `assets` rows (a caption: `jobs.result`) |
+| `failed`    | worker | Anything threw; the message is in `jobs.error`                                    |
+| `canceled`  | either | The app (still queued) or the worker (running, after interrupt)                   |
 
 Every change is published as `{ type: "job", id, status, error? }`.
 
@@ -77,16 +79,17 @@ Every change is published as `{ type: "job", id, status, error? }`.
 
 `params` (`Media.JobParams`) is what actually ran, complete enough to run it again:
 "Reroll" copies it with a new seed, "Reuse settings" loads it back into the form. A cutout
-job takes one image; the form queues one job per image. A voice job keeps its whole script
-in `jobs.prompt` and makes one clip per line (`scriptLines` in `@/libs/job` is the one
-place that splits it).
+or caption job takes one image; the form queues one job per image. A voice job keeps its
+whole script in `jobs.prompt` and makes one clip per line (`scriptLines` in `@/libs/job`
+is the one place that splits it).
 
 ### Running it
 
 `worker/index.ts` pops an id and calls `runJob`, which re-reads the row (a job no longer
-`queued` was canceled or deleted while waiting, and is skipped), waits for ComfyUI unless
-it is a voice job, marks it `running`, and hands it to `processJob` (`worker/process.ts`).
-A voice job goes straight to `runVoiceJob` (below). The others run on ComfyUI:
+`queued` was canceled or deleted while waiting, and is skipped), waits for ComfyUI when
+the job runs on it (`runsOnComfy`), marks it `running`, and hands it to `processJob`
+(`worker/process.ts`). A voice job goes straight to `runVoiceJob` and a caption job to
+`runCaptionJob` (both below). The others run on ComfyUI:
 
 1. Load the job's inputs and turn each into the name ComfyUI's `LoadImage` takes
    (`comfyImageName`).
@@ -106,14 +109,15 @@ A voice job goes straight to `runVoiceJob` (below). The others run on ComfyUI:
   can't race the worker), removes the id from the list, and publishes the event.
 - `running`: the app publishes a cancel on `frozen:control`. The worker sets
   `control.isCanceled` and calls `control.cancel`, which whatever runs the job has set:
-  interrupt the prompt on ComfyUI, or stop the voice service. The run ends as `canceled`.
+  interrupt the prompt on ComfyUI, or stop the job's Python service. The run ends as
+  `canceled`.
 
 ### Recovery
 
 When the worker starts, it puts Redis back in step with Postgres: a job still `running`
 belonged to a worker that is gone and becomes `failed`; a `queued` job missing from the
 list is pushed again, oldest first. On `SIGINT` it interrupts the running job, marks it
-failed, stops the voice service and deletes its status key.
+failed, stops the Python services and deletes its status key.
 
 ## Building workflows
 
@@ -152,11 +156,15 @@ return builder.build()
 
 Rules that keep them honest:
 
+- **The model is the job's choice.** Each form starts with a `ModelSelect` over what
+  `Engine.Models` lists for its kind, and the pick is stored in the job's params
+  (`params.model`). For video one choice is a pair of Wan files (`Engine.VideoModel`),
+  matched up by name in `pairVideoModels`.
 - **Model file names are never hard-coded.** `discoverModels()` (`comfy/discover.ts`) asks
-  ComfyUI which files it has and matches them by pattern; the worker adds the voice engine
-  (`findVoiceModel`), and the result (`Engine.Models`) travels in the engine status. A
-  builder throws a plain message when its models are missing, and the form already blocks
-  submission with a note.
+  ComfyUI which files it has and matches them by pattern; the worker adds the voice and
+  caption engines (`findVoiceModels`, `findCaptionModels`), and the result
+  (`Engine.Models`) travels in the engine status. A builder throws a plain message when
+  its models are missing, and the form already blocks submission with a note.
 - **What a model needs is written where it is used**, as a comment with the reason: the
   sampler per mode, the negative prompt that must not be empty, the 32px size grid. Those
   were found by testing; don't "simplify" them away.
@@ -165,6 +173,34 @@ Rules that keep them honest:
   UI never promises what the workflow doesn't do.
 - Check a node's inputs against the running ComfyUI before using it:
   `curl -s http://127.0.0.1:8188/object_info/<NodeClass>`.
+
+## The Python services
+
+The voice and caption engines are each a small HTTP service in Python, with an environment
+and a model folder of their own. `worker/service.ts` (`createPythonService`) is what the
+worker runs them with, and what a third one would use:
+
+- **The worker owns the process.** It starts the service for the first job that needs it
+  (`start`), reuses one that already answers, and stops them all on exit (`stopServices`).
+  The service is given the worker's process id and exits when that process is gone, so a
+  killed worker doesn't leave a model in VRAM.
+- **Don't watch stdin for that.** A thread blocked reading a stdin pipe deadlocks the
+  whole service on Windows as soon as the model's libraries start a child process while
+  loading. The parent is watched by process id (`exit_with_parent` in the servers), and
+  the service is started with stdin closed.
+- **Stopping kills the tree.** On Windows the environment's `python.exe` is a launcher
+  with the real interpreter as its child; `stop` uses `taskkill /T`. Stopping is also how
+  a running job is canceled.
+- **A request is answered as a stream** of JSON events, one per line (`stream`), which the
+  job's runner turns into progress labels and results.
+- **A service can have several models.** They are the folders beside its default one
+  (`TTS_MODEL_DIR`, `CAPTION_MODEL_DIR`), found by `findModelFolders` and listed in
+  `Engine.Models` with the default first. The service is started with that parent folder
+  (`--models-root`) and every request names the folder to use (`model`, from the job's
+  params). It holds one model at a time and swaps when a job names another.
+- **Every service has `GET /health`** (`{ status, loaded, device }`, answered as soon as
+  Python is up, before anything heavy loads) **and `POST /unload`**, which drops the model
+  and its VRAM until the next request. `claimGpu` relies on both.
 
 ## The voice engine
 
@@ -178,9 +214,9 @@ Voice jobs don't touch ComfyUI. `runVoiceJob` (`worker/voice.ts`) talks to
 | `POST /generate` | Speaks `lines` (`{ text, file }`) with one `description` and `seed`; streams one JSON event per line |
 | `POST /unload`   | Drops the model, and its VRAM, until the next `/generate`                                            |
 
-- **Installed or not** is read from disk, by `findVoiceModel()`: the environment's Python,
-  the script, and the model's weights. That is all `Engine.Models.voice` means; nothing is
-  started to find out.
+- **Installed or not** is read from disk, by `findVoiceModels()`: the environment's
+  Python, the script, and at least one model folder with weights and the two tokenizers.
+  That is all `Engine.Models.voice` means; nothing is started to find out.
 - **The worker owns the process.** It starts the service for the first voice job
   (`startVoiceEngine`), reuses one that already answers, and stops it on exit. The service
   is given the worker's process id and exits when that process is gone, so a killed worker
@@ -206,9 +242,57 @@ Voice jobs don't touch ComfyUI. `runVoiceJob` (`worker/voice.ts`) talks to
 A request can be tried by hand, with the service started in a terminal:
 
 ```sh
-tts/.venv/Scripts/python.exe tts/server.py --model-dir tts/models/japanese-parler-tts-mini --output-root D:/tmp
+tts/.venv/Scripts/python.exe tts/server.py --models-root tts/models --output-root D:/tmp
 curl -s -X POST http://127.0.0.1:8191/generate -H "Content-Type: application/json" \
-  -d '{"lines":[{"text":"こんにちは。","file":"D:/tmp/a/hello.wav"}],"description":"JSUT speaks at a moderate pace in a very clear recording.","seed":1}'
+  -d '{"model":"japanese-parler-tts-mini","lines":[{"text":"こんにちは。","file":"D:/tmp/a/hello.wav"}],"description":"JSUT speaks at a moderate pace in a very clear recording.","seed":1}'
+```
+
+## The caption engine
+
+Caption jobs don't touch ComfyUI either. `runCaptionJob` (`worker/caption.ts`) talks to
+`caption/server.py`, which keeps a vision-language model (Ministral 3 8B, an uncensored
+fine-tune made for captioning) and listens on `127.0.0.1:<CAPTION_PORT>`:
+
+| Request         | Does                                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------- |
+| `POST /caption` | Reads one `image` (a path) in a `mode` and `style`, with a `prompt`; streams JSON events |
+| `GET /health`   | As above                                                                                 |
+| `POST /unload`  | As above                                                                                 |
+
+- **The result is text, so it lives on the job**: `jobs.result` (`Media.Caption`:
+  `description`, `positive`, `negative`), not an `assets` row. The job's image is its one
+  input, which is also its cover in the recent strip. Captions don't appear in the
+  gallery, which lists assets; they have the Caption page (`/caption`), whose recent strip
+  lists caption jobs only, as the studio's lists everything else.
+- **Two modes** (`params.mode`). `prompts` writes a description and a positive and a
+  negative prompt, and the job's prompt is optional guidance. `answer` does whatever the
+  job's prompt says with the image, in plain text: the reply is stored as `description`,
+  with both prompts empty. The user's text is `jobs.prompt`, as for every other kind.
+- **One answer, three fields** (in `prompts` mode). The model is asked for a JSON object.
+  `parse_answer` reads it, picks the fields out one by one when the JSON is broken or cut
+  off, and failing that keeps the whole answer as the description.
+- **The negative prompt is advice.** What to keep out can't be seen in an image; the model
+  suggests what suits that kind of image. The UI says so next to it.
+- **Greedy decoding with a repetition penalty.** No seed: the same image and settings give
+  the same text, so there is no "Reroll". Without the penalty the model repeats its own
+  sentences until the token limit.
+- **FP8 weights stay FP8** (`keep_in_fp8`). PyTorch can't compute in FP8, so loading
+  widens the weights to 16 bits, about 18 GB for this model. Each layer whose values
+  survive the trip to FP8 and back keeps them in 8 bits and widens them only while it
+  computes: about 10 GB, and nothing lost. A model stored in full precision is left as it
+  loaded.
+- **Any vision-language model works.** The service loads a model through transformers'
+  Auto classes, so a folder with a `config.json` and weights under `caption/models` is a
+  model the form can pick; its name in the UI is the folder's.
+- **It only reads images** from under the folders it was started with (`--image-root`):
+  Frozen's subfolders of ComfyUI's input and output directories.
+- **Python packages** are in `caption/requirements.txt`. The environment is separate from
+  the voice one because the two need different major versions of transformers.
+
+```sh
+caption/.venv/Scripts/python.exe caption/server.py --models-root caption/models --image-root D:/tmp
+curl -s -X POST http://127.0.0.1:8192/caption -H "Content-Type: application/json" \
+  -d '{"model":"Ministral-3-8B-Uncensored-FP8","image":"D:/tmp/apple.png","mode":"prompts","style":"prose","prompt":""}'
 ```
 
 ### Adding a kind of job
@@ -220,11 +304,14 @@ curl -s -X POST http://127.0.0.1:8191/generate -H "Content-Type: application/jso
 3. What it needs installed, in `Engine.Models`: from ComfyUI in `discoverModels`, from
    elsewhere in `allModels` (`worker/engine.ts`).
 4. How it runs: a builder in `comfy/graphs/` and a `case` in `processJob`, or, off
-   ComfyUI, its own runner called from the top of `processJob` as `runVoiceJob` is. Either
-   way it sets `control.cancel` and ends by inserting `assets`.
-5. A form in `(studio)/components/`, mounted in `studio-forms.tsx` with its icon, and its
-   result: in `job-result.tsx`, or a view of its own picked in `job-canvas.tsx`
-   (`voice-result.tsx`).
+   ComfyUI, its own runner called from the top of `processJob` as `runVoiceJob` is (and
+   the kind added to `runsOnComfy`). Either way it sets `control.cancel` and ends by
+   inserting `assets`, or for a result that is text, by writing `jobs.result`.
+5. A form in `(studio)/components/`, starting with a `ModelSelect` when the kind has
+   models to choose from, mounted in `studio-forms.tsx` with its icon (or, like Caption,
+   on a page of its own with a link in the header), and its result: in `job-result.tsx`,
+   or a view of its own picked in `job-canvas.tsx` (`voice-result.tsx`,
+   `caption-result.tsx`).
 6. The gallery tile and the recent strip, when the result isn't a picture.
 
 ## Media on disk
@@ -262,7 +349,8 @@ with (`COMFY_INPUT_DIR`, `COMFY_OUTPUT_DIR`), inside a `frozen/` subfolder
   open, the video models spill into shared memory and a job that takes a minute takes ten.
 - The two Wan models don't fit together in 16 GB, so every video pass loads one, then the
   other. A long or multi-keyframe video pays that swap per pass.
-- **The two engines take turns.** Before a voice job the worker asks ComfyUI to drop its
-  models (`freeComfyMemory`); before a ComfyUI job it has the voice model unloaded
-  (`unloadVoiceModel`). The voice model takes about 4 GB and loads in a few seconds;
-  ComfyUI's take longer to come back. Jobs of one kind in a row pay nothing.
+- **The engines take turns** (`claimGpu` in `worker/service.ts`). Before a voice or
+  caption job the worker asks ComfyUI to drop its models (`freeComfyMemory`) and the other
+  service to unload; before a ComfyUI job both services unload. The voice model takes
+  about 4 GB and loads in a few seconds; the caption model takes about 10 GB and half a
+  minute; ComfyUI's take longer to come back. Jobs of one kind in a row pay nothing.

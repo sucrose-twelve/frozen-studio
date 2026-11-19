@@ -1,5 +1,10 @@
 declare namespace Media {
-  export type JobKind = "image" | "video" | "cutout" | "voice"
+  export type JobKind = "image" | "video" | "cutout" | "voice" | "caption"
+
+  /**
+   * The kinds whose forms share the studio page. A caption job has a page of its own.
+   */
+  export type StudioMode = Exclude<JobKind, "caption">
 
   export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "canceled"
 
@@ -57,6 +62,11 @@ declare namespace Media {
 
   export type VideoParams = {
     kind: "video"
+    /**
+     * Which pair of Wan files runs the job (`Engine.VideoModel.name`). Jobs from before there was a choice
+     * have none, and run on the first pair installed.
+     */
+    model?: string
     seconds: number
     resolution: VideoResolution
     /**
@@ -103,26 +113,83 @@ declare namespace Media {
     seed: number
   }
 
-  export type JobParams = ImageParams | VideoParams | CutoutParams | VoiceParams
+  /**
+   * What a caption job writes about its image:
+   *
+   * - `prompts`: a description, and a positive and a negative prompt that ask for the image again
+   * - `answer`: whatever the job's prompt asks for, as plain text
+   */
+  export type CaptionMode = "prompts" | "answer"
+
+  /**
+   * How a caption job writes its positive prompt: a paragraph (what Qwen-Image and Wan read best) or a
+   * list of tags.
+   */
+  export type CaptionStyle = "prose" | "tags"
+
+  /**
+   * A caption job has a vision-language model read its one reference image. What the user tells the model
+   * is the job's prompt: an instruction to follow in `prompts` mode (optional), the thing to answer in
+   * `answer` mode. It has no seed: the model decodes greedily, so the same image and settings give the same
+   * text.
+   */
+  export type CaptionParams = {
+    kind: "caption"
+    model: string
+    mode: CaptionMode
+    /**
+     * Only used in `prompts` mode.
+     */
+    style: CaptionStyle
+  }
+
+  export type JobParams =
+    ImageParams | VideoParams | CutoutParams | VoiceParams | CaptionParams
+
+  /**
+   * What a caption job wrote. It is text, not a file, so it is kept on the job (`jobs.result`) instead of
+   * as an asset.
+   *
+   * - `description`: what is in the image, in full sentences. For an `answer` job, the model's reply
+   * - `positive`: a prompt that asks for the image again. Empty for an `answer` job
+   * - `negative`: what to keep out. The model can't see this in the image; it is its advice for the kind
+   *   of image, and empty when it gave none
+   */
+  export type Caption = {
+    description: string
+    positive: string
+    negative: string
+  }
 }
 
 declare namespace Engine {
   /**
-   * What the worker found installed, per job kind: model files in ComfyUI, and the text-to-speech engine
-   * beside this project. `null` means that kind can't run yet.
+   * What the worker found installed, per job kind: model files in ComfyUI, and the text-to-speech and
+   * captioning engines beside this project. `null` means that kind can't run yet.
    */
   export type Models = {
     image: { models: string[]; textEncoder: string; vae: string } | null
     video: {
-      highNoise: string
-      lowNoise: string
+      models: VideoModel[]
       textEncoder: string
       vae: string
       fastHighNoise: string | null
       fastLowNoise: string | null
     } | null
     cutout: { model: string } | null
-    voice: { model: string } | null
+    voice: { models: string[] } | null
+    caption: { models: string[] } | null
+  }
+
+  /**
+   * Wan 2.2 comes as two files that work in turn: the high-noise model lays out the motion, the low-noise
+   * model draws the detail. One pair is one choice in the Video form, named after what the two file names
+   * share.
+   */
+  export type VideoModel = {
+    name: string
+    highNoise: string
+    lowNoise: string
   }
 
   /**

@@ -4,6 +4,7 @@ import { Button, toast } from "@heroui/react"
 import {
   ImagePlus,
   RefreshCw,
+  ScanText,
   Scissors,
   SlidersHorizontal,
   VideoSparkles
@@ -12,8 +13,8 @@ import { useCallback, useState } from "react"
 
 import { createJob, rerollJob } from "@/actions/jobs/create"
 import type { AssetView, JobDetail } from "@/actions/jobs/read"
-import { useStore } from "@/hooks"
 
+import { usePrefill } from "../hooks/use-prefill"
 import { useStudioQuery } from "../hooks/use-studio-query"
 import { DownloadButton, FavoriteButton } from "./asset-buttons"
 import { DeleteJobButton } from "./delete-job-button"
@@ -35,7 +36,7 @@ export function ResultActions({
   asset?: AssetView | null
 }>) {
   const { showJob } = useStudioQuery()
-  const requestPrefill = useStore((state) => state.requestPrefill)
+  const requestPrefill = usePrefill()
   const [pending, setPending] = useState<"reroll" | "cutout" | null>(null)
 
   const handleReroll = useCallback(async () => {
@@ -56,6 +57,10 @@ export function ResultActions({
   }, [asset, requestPrefill])
   const handleAnimate = useCallback(() => {
     if (asset) requestPrefill({ kind: "video", references: [asset], source: null })
+  }, [asset, requestPrefill])
+
+  const handleDescribe = useCallback(() => {
+    if (asset) requestPrefill({ kind: "caption", references: [asset], source: null })
   }, [asset, requestPrefill])
 
   const handleCutout = useCallback(async () => {
@@ -104,6 +109,10 @@ export function ResultActions({
               Cut out
             </Button>
           )}
+          <Button variant='secondary' size='sm' onPress={handleDescribe}>
+            <ScanText {...ICON} />
+            Describe
+          </Button>
         </>
       ) : null}
 

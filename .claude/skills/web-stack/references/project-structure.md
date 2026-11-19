@@ -10,6 +10,7 @@ imports only inside the same feature folder (e.g. a page importing its own
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/`      | The app and the worker (below)                                                                                                                                    |
 | `tts/`      | The text-to-speech service (Python): `server.py`, `requirements.txt`, `download_model.py`. Its `.venv/` and `models/` are not committed                           |
+| `caption/`  | The captioning service (Python), laid out the same way                                                                                                            |
 | `tests/`    | **Scripts**, not tests. The project has no automated tests; `tests/` plays the role of a `scripts/` folder (keep the name `tests`)                                |
 | `launcher/` | `Frozen.ps1`, the one-click start (ComfyUI + app + worker, tray icon). Windows PowerShell 5.1, plain ASCII. Its `logs/` output and `frozen.ico` are not committed |
 | `notes/`    | The owner's notes and plans                                                                                                                                       |
@@ -35,7 +36,7 @@ src/
 │   ├── assets/           update.ts, validator.zod.ts
 │   └── engine/           read.ts
 ├── app/
-│   ├── (studio)/         The app's one route group: / (studio) and /gallery
+│   ├── (studio)/         The app's one route group: / (studio), /caption and /gallery
 │   ├── api/              Route Handlers for non-UI responses: events (SSE), media/[id], uploads
 │   └── error.tsx, not-found.tsx, layout.tsx
 ├── components/           Shared UI used by 2+ routes or by the layout (site-header, engine-status, job-events)
@@ -47,7 +48,7 @@ src/
 ├── stores/<name>/        zustand store: state.ts (createXStore) + index.tsx (Provider + hook)
 ├── styles/               globals.css, theme.css (palette + HeroUI tokens), custom.css (@layer components)
 ├── types/                app.d.ts (helper types), schema.d.ts (the Media and Engine namespaces)
-└── worker/               The queue worker: index.ts (loop), process.ts (one job), voice.ts, engine.ts, comfy-socket.ts, gpu.ts
+└── worker/               The queue worker: index.ts (loop), process.ts (one job), service.ts (the Python services), voice.ts, caption.ts, engine.ts, comfy-socket.ts, gpu.ts
 ```
 
 `src/worker/` is not part of the Next.js bundle: it is a bun process started by

@@ -8,7 +8,7 @@ import { EngineStatus } from "./engine-status"
 import { HeaderNav } from "./header-nav"
 
 /**
- * The bar across the top of every page: brand, the two sections, and the engine's status.
+ * The bar across the top of every page: brand, the sections, and the engine's status.
  */
 export function SiteHeader() {
   return (

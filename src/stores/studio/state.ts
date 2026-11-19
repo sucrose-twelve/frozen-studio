@@ -18,11 +18,15 @@ export type JobLive = {
  *
  * - `references`: images to put in the form's reference slots
  * - `source`: a job whose prompt and settings to copy, or `null` to keep what the form has
+ * - `prompt`: text a caption wrote, for the form's prompt fields; the negative prompt is left alone when the
+ *   caption has none. With it the request is only about the text: the form's references and settings stay
+ *   as they are
  */
 export type Prefill = {
   kind: Media.JobKind
   references: AssetView[]
   source: JobDetail | null
+  prompt?: { positive: string; negative?: string }
 }
 
 type State = {

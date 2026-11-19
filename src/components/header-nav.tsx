@@ -1,6 +1,6 @@
 "use client"
 
-import { GalleryThumbnails, Sparkles } from "@keyline-icons/react"
+import { GalleryThumbnails, ScanText, Sparkles } from "@keyline-icons/react"
 import NextLink from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -8,6 +8,7 @@ import { cls } from "@/libs/utils"
 
 const LINKS = [
   { href: "/", label: "Studio", Icon: Sparkles },
+  { href: "/caption", label: "Caption", Icon: ScanText },
   { href: "/gallery", label: "Gallery", Icon: GalleryThumbnails }
 ] as const
 

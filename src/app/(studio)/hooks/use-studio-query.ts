@@ -6,7 +6,7 @@ import { useCallback, useMemo, useTransition } from "react"
 import { studioParsers } from "../validator.nuqs"
 
 /**
- * The studio's URL state.
+ * The studio's URL state, which the Caption page shares for the job on its canvas.
  *
  * - `setMode` only swaps the visible form, so it stays on the client (`shallow`).
  * - `showJob` puts another job on the canvas, which the server has to load: it re-renders the page inside a
@@ -20,7 +20,7 @@ export function useStudioQuery() {
   })
 
   const setMode = useCallback(
-    (mode: Media.JobKind) => setQuery({ mode }, { shallow: true }),
+    (mode: Media.StudioMode) => setQuery({ mode }, { shallow: true }),
     [setQuery]
   )
   // `asset` belongs to the job it came with, so it goes when the job changes
