@@ -65,6 +65,7 @@ export function buildVideoGraph(input: {
       count: 1,
       steps: IMAGE_DEFAULTS.steps,
       cfg: IMAGE_DEFAULTS.cfg,
+      sampler: null,
       seed: params.seed
     })
     const savedStill = builder.add("SaveImage", {
@@ -115,9 +116,11 @@ export function buildVideoGraph(input: {
     },
     "Reading the prompt"
   )
+  // What the user wants kept out goes in front of Wan's own list, which stays: it is what holds off the
+  // blur, the extra fingers and the frozen frames
   const negative = builder.add("CLIPTextEncode", {
     clip: textEncoder,
-    text: WAN_NEGATIVE_PROMPT
+    text: [params.negative?.trim(), WAN_NEGATIVE_PROMPT].filter(Boolean).join(", ")
   })
 
   const segments = planSegments(params.seconds, keyframes.length, params.isLoop)

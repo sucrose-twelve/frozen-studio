@@ -3,7 +3,7 @@ import type {
   VideoValidator,
   VoiceValidator
 } from "@/actions/jobs/validator.zod"
-import { IMAGE_DEFAULTS, VOICE_PRESETS } from "@/constants"
+import { IMAGE_DEFAULTS, VIDEO_SAMPLING, VOICE_PRESETS } from "@/constants"
 
 export const IMAGE_FORM_DEFAULTS: ImageValidator = {
   kind: "image",
@@ -16,6 +16,7 @@ export const IMAGE_FORM_DEFAULTS: ImageValidator = {
   count: IMAGE_DEFAULTS.count,
   steps: IMAGE_DEFAULTS.steps,
   cfg: IMAGE_DEFAULTS.cfg,
+  sampler: null,
   seed: null,
   shouldRemoveBackground: false
 }
@@ -30,6 +31,8 @@ export const VIDEO_FORM_DEFAULTS: VideoValidator = {
   isStaticCamera: false,
   isLoop: false,
   isFast: true,
+  steps: VIDEO_SAMPLING.full.steps,
+  negative: "",
   seed: null,
   shouldSaveFrames: false,
   shouldRemoveBackground: false

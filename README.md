@@ -161,6 +161,9 @@ Conventions for the code live in `.claude/skills/web-stack/`.
   shared memory and generation crawls. The header warns when another program holds VRAM.
 - **Long videos** are made in passes of up to 5 seconds. Each pass loads the high-noise
   and then the low-noise model, so the time grows with every pass.
+- **Negative prompts** work in the Image form always, and in the Video form only with Fast
+  mode off: the 4-step schedule ignores them, and the full one takes about two minutes per
+  second of video. Voice has none; its description does the steering.
 - **Voice.** The model speaks Japanese, with female voices only: asking for a man lowers
   the pitch a little and nothing more. A line may be up to 160 characters, about the 30
   seconds the model can speak in one go. The first job after an image or video job takes

@@ -20,7 +20,10 @@ import { imageValidator, type ImageValidator } from "@/actions/jobs/validator.zo
 import {
   ASPECTS,
   IMAGE_COUNTS,
+  IMAGE_DEFAULT_SAMPLERS,
   IMAGE_QUALITIES,
+  IMAGE_SAMPLER_LABELS,
+  IMAGE_SAMPLERS,
   IMAGE_SIZES,
   IMAGE_TIER_LABELS,
   IMAGE_TIERS,
@@ -42,6 +45,15 @@ import { ReferencePicker } from "./reference-picker"
 import { SubmitBar } from "./submit-bar"
 
 type AspectChoice = Media.Aspect | "auto"
+type SamplerChoice = Media.ImageSampler | "auto"
+
+const SAMPLER_OPTIONS: Option<SamplerChoice>[] = [
+  { value: "auto", label: "Auto" },
+  ...IMAGE_SAMPLERS.map((sampler) => ({
+    value: sampler,
+    label: IMAGE_SAMPLER_LABELS[sampler]
+  }))
+]
 
 const QUALITY_OPTIONS: Option<number>[] = IMAGE_QUALITIES.map((quality) => ({
   value: quality.steps,
@@ -72,8 +84,8 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
     defaultValues: IMAGE_FORM_DEFAULTS
   })
   const { errors, isSubmitting } = form.formState
-  const [model, aspect, tier, count, steps, cfg, seed, shouldRemoveBackground] = useWatch(
-    {
+  const [model, aspect, tier, count, steps, cfg, sampler, seed, shouldRemoveBackground] =
+    useWatch({
       control: form.control,
       name: [
         "model",
@@ -82,11 +94,11 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
         "count",
         "steps",
         "cfg",
+        "sampler",
         "seed",
         "shouldRemoveBackground"
       ]
-    }
-  )
+    })
 
   const models = engine?.models.image?.models
   const firstModel = models?.[0]
@@ -103,6 +115,8 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
   const sizeNote = aspect
     ? IMAGE_SIZES[aspect][tier].join(" × ")
     : "Follows the first reference"
+
+  const isPresetQuality = IMAGE_QUALITIES.some((quality) => quality.steps === steps)
 
   const blocker = !engine
     ? "The worker is offline, so the installed models are unknown."
@@ -150,8 +164,23 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
     (value: number) => form.setValue("count", value as ImageValidator["count"]),
     [form]
   )
+  // The field hands back nothing (or not a number) while it is being cleared
+  const handleStepsInput = useCallback(
+    (value: number | undefined) =>
+      form.setValue(
+        "steps",
+        typeof value === "number" && Number.isFinite(value)
+          ? Math.round(value)
+          : IMAGE_FORM_DEFAULTS.steps
+      ),
+    [form]
+  )
   const handleCfgChange = useCallback(
     (value: number | undefined) => form.setValue("cfg", value ?? IMAGE_FORM_DEFAULTS.cfg),
+    [form]
+  )
+  const handleSamplerChange = useCallback(
+    (value: SamplerChoice) => form.setValue("sampler", value === "auto" ? null : value),
     [form]
   )
   const handleSeedChange = useCallback(
@@ -202,6 +231,7 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
         count: params.count as ImageValidator["count"],
         steps: params.steps,
         cfg: params.cfg,
+        sampler: params.sampler ?? null,
         seed: params.seed,
         shouldRemoveBackground: params.shouldRemoveBackground
       })
@@ -289,7 +319,8 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
       </FormSection>
 
       <FormSection title='Output' note={sizeNote}>
-        <FieldRow label='Quality'>
+        <FieldRow
+          label={isPresetQuality ? "Quality" : `Quality · custom, ${steps} steps`}>
           <OptionGroup
             label='Quality'
             value={steps}
@@ -352,7 +383,35 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
             {...form.register("negative")}
           />
         </FieldRow>
+        <FieldRow label='Sampler'>
+          <OptionGroup
+            label='Sampler'
+            value={sampler ?? "auto"}
+            options={SAMPLER_OPTIONS}
+            onChange={handleSamplerChange}
+          />
+          <p className='text-muted text-xs'>
+            Auto uses {IMAGE_SAMPLER_LABELS[IMAGE_DEFAULT_SAMPLERS.create]} for a new
+            image and {IMAGE_SAMPLER_LABELS[IMAGE_DEFAULT_SAMPLERS.edit]} for an edit, the
+            two that are known to work. The others are there to experiment with.
+          </p>
+        </FieldRow>
         <div className='grid grid-cols-2 gap-3'>
+          <NumberField
+            fullWidth
+            variant='secondary'
+            minValue={1}
+            maxValue={100}
+            step={1}
+            value={steps}
+            onChange={handleStepsInput}>
+            <Label className='text-muted text-xs'>Steps</Label>
+            <NumberField.Group>
+              <NumberField.DecrementButton />
+              <NumberField.Input />
+              <NumberField.IncrementButton />
+            </NumberField.Group>
+          </NumberField>
           <NumberField
             fullWidth
             variant='secondary'
@@ -368,18 +427,22 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
               <NumberField.IncrementButton />
             </NumberField.Group>
           </NumberField>
-          <FieldRow label='Seed'>
-            <Input
-              aria-label='Seed'
-              fullWidth
-              variant='secondary'
-              inputMode='numeric'
-              placeholder='Random'
-              value={seed === null ? "" : String(seed)}
-              onChange={handleSeedChange}
-            />
-          </FieldRow>
         </div>
+        <p className='text-muted text-xs'>
+          Quality picks {IMAGE_QUALITIES.map((quality) => quality.steps).join(", ")}{" "}
+          steps. Any number from 1 to 100 can be typed here instead.
+        </p>
+        <FieldRow label='Seed'>
+          <Input
+            aria-label='Seed'
+            fullWidth
+            variant='secondary'
+            inputMode='numeric'
+            placeholder='Random'
+            value={seed === null ? "" : String(seed)}
+            onChange={handleSeedChange}
+          />
+        </FieldRow>
       </FormSection>
 
       <SubmitBar

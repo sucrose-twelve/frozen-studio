@@ -56,6 +56,9 @@ export const assets = pgTable.withRLS(
 - `jsonb` columns are typed the same way
   (`params: jsonb("params").$type<Media.JobParams>()`). The union is discriminated on
   `kind`, so narrow before reading (`if (params.kind === "video")`).
+- A setting added to a `…Params` type later is **optional** (`sampler?: … | null`): the
+  jobs already in the table don't have it, and no migration fills it in. Read it with a
+  fallback (`params.sampler ?? null`), so an old job still opens, rerolls and reuses.
 - Index what the app filters and sorts by, and name it `<table>_<columns>_index`.
 - A comment above each table says what one row is.
 

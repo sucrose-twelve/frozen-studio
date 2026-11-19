@@ -6,6 +6,7 @@ import Image from "next/image"
 import { useMemo, useState } from "react"
 
 import type { AssetView, JobDetail } from "@/actions/jobs/read"
+import { IMAGE_SAMPLER_LABELS } from "@/constants"
 import { cls, formatElapsed } from "@/libs/utils"
 
 import { OptionGroup, type Option } from "./option-group"
@@ -27,7 +28,10 @@ function describe(job: JobDetail, asset: AssetView) {
   const params = job.params
 
   if (params.kind === "image") {
-    facts.push(`${params.steps} steps · CFG ${params.cfg}`, `seed ${params.seed}`)
+    facts.push(`${params.steps} steps · CFG ${params.cfg}`)
+    // Only a sampler that was picked by hand is worth a chip; "Auto" is the usual case
+    if (params.sampler) facts.push(IMAGE_SAMPLER_LABELS[params.sampler])
+    facts.push(`seed ${params.seed}`)
   }
   if (params.kind === "video") {
     facts.push(

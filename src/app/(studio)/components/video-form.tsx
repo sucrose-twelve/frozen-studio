@@ -1,6 +1,6 @@
 "use client"
 
-import { Input, TextArea, toast } from "@heroui/react"
+import { Input, Label, NumberField, TextArea, toast } from "@heroui/react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { VideoSparkles } from "@keyline-icons/react"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -14,7 +14,9 @@ import {
   MAX_REFERENCES,
   VIDEO_FPS,
   VIDEO_RESOLUTIONS,
-  VIDEO_SECONDS
+  VIDEO_SAMPLING,
+  VIDEO_SECONDS,
+  VIDEO_STEPS
 } from "@/constants"
 import { useEngine, useStore } from "@/hooks"
 import { aspectRatioOf, countFrames, planSegments, videoSize } from "@/libs/video-plan"
@@ -76,6 +78,7 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
     isStaticCamera,
     isLoop,
     isFast,
+    steps,
     seed,
     shouldSaveFrames,
     shouldRemoveBackground
@@ -88,6 +91,7 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
       "isStaticCamera",
       "isLoop",
       "isFast",
+      "steps",
       "seed",
       "shouldSaveFrames",
       "shouldRemoveBackground"
@@ -96,6 +100,8 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
 
   const models = engine?.models
   const hasFastModels = !!models?.video?.fastHighNoise && !!models.video.fastLowNoise
+  // Fast mode as the job will actually run it: asked for, and the LoRAs are there
+  const isFastRun = isFast && hasFastModels
   const hasCutoutModel = !!models?.cutout
   const isTextToVideo = references.length === 0
   const canLoop = references.length > 1
@@ -166,6 +172,17 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
     (isSelected: boolean) => form.setValue("shouldRemoveBackground", isSelected),
     [form]
   )
+  // The field hands back nothing (or not a number) while it is being cleared
+  const handleStepsChange = useCallback(
+    (value: number | undefined) =>
+      form.setValue(
+        "steps",
+        typeof value === "number" && Number.isFinite(value)
+          ? Math.round(value)
+          : VIDEO_FORM_DEFAULTS.steps
+      ),
+    [form]
+  )
   const handleSeedChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) =>
       form.setValue("seed", parseSeed(event.target.value)),
@@ -201,6 +218,9 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
         isStaticCamera: params.isStaticCamera,
         isLoop: params.isLoop,
         isFast: params.isFast,
+        // A fast job stored its fixed 4 steps, which is not what the full schedule should start from
+        steps: params.isFast ? VIDEO_FORM_DEFAULTS.steps : params.steps,
+        negative: params.negative ?? "",
         seed: params.seed,
         shouldSaveFrames: params.shouldSaveFrames,
         shouldRemoveBackground: params.shouldRemoveBackground
@@ -337,17 +357,56 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
       <FormDivider />
 
       <FormSection title='Advanced'>
-        <FieldRow label='Seed'>
-          <Input
-            aria-label='Seed'
+        <FieldRow label='Negative prompt'>
+          <TextArea
+            aria-label='Negative prompt'
+            fullWidth
+            rows={2}
+            variant='secondary'
+            disabled={isFastRun}
+            placeholder='What to keep out of the video. Leave empty unless something keeps showing up.'
+            {...form.register("negative")}
+          />
+          <p className='text-muted text-xs'>
+            {isFastRun
+              ? "Fast mode ignores a negative prompt. Turn it off to use one."
+              : "Added to the list Wan always gets (blur, extra fingers, frozen frames)."}
+          </p>
+        </FieldRow>
+        <div className='grid grid-cols-2 gap-3'>
+          <NumberField
             fullWidth
             variant='secondary'
-            inputMode='numeric'
-            placeholder='Random'
-            value={seed === null ? "" : String(seed)}
-            onChange={handleSeedChange}
-          />
-        </FieldRow>
+            minValue={VIDEO_STEPS.min}
+            maxValue={VIDEO_STEPS.max}
+            step={1}
+            isDisabled={isFastRun}
+            value={isFastRun ? VIDEO_SAMPLING.fast.steps : steps}
+            onChange={handleStepsChange}>
+            <Label className='text-muted text-xs'>Steps</Label>
+            <NumberField.Group>
+              <NumberField.DecrementButton />
+              <NumberField.Input />
+              <NumberField.IncrementButton />
+            </NumberField.Group>
+          </NumberField>
+          <FieldRow label='Seed'>
+            <Input
+              aria-label='Seed'
+              fullWidth
+              variant='secondary'
+              inputMode='numeric'
+              placeholder='Random'
+              value={seed === null ? "" : String(seed)}
+              onChange={handleSeedChange}
+            />
+          </FieldRow>
+        </div>
+        <p className='text-muted text-xs'>
+          {isFastRun
+            ? `Fast mode always runs ${VIDEO_SAMPLING.fast.steps} steps. Turn it off to set them.`
+            : `${VIDEO_SAMPLING.full.steps} is Wan's own setting. The time a video takes grows with the steps.`}
+        </p>
       </FormSection>
 
       <SubmitBar

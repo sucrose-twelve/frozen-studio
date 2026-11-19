@@ -60,7 +60,11 @@ export function JobProgress({
           <h2 className='text-lg font-semibold'>
             {isRunning ? "Generating" : "Queued"} · {JOB_KIND_LABELS[job.kind]}
           </h2>
-          <span className='text-muted font-mono text-sm tabular-nums'>
+          <span
+            // The clock is read once on the server and again in the browser, a moment later, so the two
+            // can disagree by a second on a job that is already running. The next tick corrects it
+            suppressHydrationWarning
+            className='text-muted font-mono text-sm tabular-nums'>
             {startedAt ? formatElapsed(now - startedAt) : "0:00"}
           </span>
         </div>

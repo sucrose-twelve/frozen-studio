@@ -25,6 +25,11 @@ declare namespace Media {
 
   export type ImageTier = "standard" | "large" | "extra"
 
+  /**
+   * Samplers offered for image jobs, by the names ComfyUI gives them.
+   */
+  export type ImageSampler = "euler_ancestral" | "euler" | "dpmpp_2m" | "er_sde"
+
   export type VideoResolution = 480 | 720
 
   export type ImageParams = {
@@ -41,6 +46,11 @@ declare namespace Media {
     count: number
     steps: number
     cfg: number
+    /**
+     * `null` leaves the choice to the mode (`IMAGE_DEFAULT_SAMPLERS`). Jobs from before the option existed
+     * have no value at all, which means the same.
+     */
+    sampler?: ImageSampler | null
     seed: number
     shouldRemoveBackground: boolean
   }
@@ -62,6 +72,11 @@ declare namespace Media {
     isFast: boolean
     steps: number
     cfg: number
+    /**
+     * What to keep out of the video, on top of the list Wan always gets (`WAN_NEGATIVE_PROMPT`). Without
+     * effect in fast mode, which runs at CFG 1. Jobs from before the option existed have no value.
+     */
+    negative?: string
     seed: number
     shouldSaveFrames: boolean
     shouldRemoveBackground: boolean

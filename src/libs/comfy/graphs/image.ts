@@ -1,3 +1,5 @@
+import { IMAGE_DEFAULT_SAMPLERS } from "@/constants"
+
 import {
   GraphBuilder,
   output,
@@ -21,6 +23,10 @@ type QwenImageOptions = {
   count: number
   steps: number
   cfg: number
+  /**
+   * `null` picks the one that suits the mode (`IMAGE_DEFAULT_SAMPLERS`).
+   */
+  sampler: Media.ImageSampler | null
   seed: number
 }
 
@@ -30,8 +36,8 @@ type QwenImageOptions = {
  *
  * - An empty negative prompt would switch CFG off in this model, so it falls back to a single space (the
  *   model card's advice).
- * - Edits sample with `euler`: `er_sde`, the card's text-to-image sampler, gave burnt, over-sharpened
- *   results in edit mode on this setup.
+ * - Unless a sampler is asked for, a new image and an edit each get the one known to work for them
+ *   (`IMAGE_DEFAULT_SAMPLERS` says which, and why they differ).
  *
  * @returns The decoded image batch
  */
@@ -98,7 +104,9 @@ export function addQwenImage(builder: GraphBuilder, options: QwenImageOptions): 
       seed: options.seed,
       steps: options.steps,
       cfg: options.cfg,
-      sampler_name: isEdit ? "euler" : "er_sde",
+      sampler_name:
+        options.sampler ??
+        (isEdit ? IMAGE_DEFAULT_SAMPLERS.edit : IMAGE_DEFAULT_SAMPLERS.create),
       scheduler: "simple",
       positive: encoded,
       negative: output(encoded, 1),
@@ -146,6 +154,7 @@ export function buildImageGraph(input: {
     count: params.count,
     steps: params.steps,
     cfg: params.cfg,
+    sampler: params.sampler ?? null,
     seed: params.seed
   })
 

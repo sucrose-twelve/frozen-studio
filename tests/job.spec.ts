@@ -34,6 +34,7 @@ if (!model) {
     count: 1,
     steps: IMAGE_DEFAULTS.steps,
     cfg: IMAGE_DEFAULTS.cfg,
+    sampler: null,
     seed: null,
     shouldRemoveBackground: false
   })

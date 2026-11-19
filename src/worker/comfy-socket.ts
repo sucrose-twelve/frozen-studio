@@ -34,6 +34,12 @@ const POLL_MS = 3_000
 const MAX_FAILED_POLLS = 10
 
 /**
+ * How many times, and how far apart, the record of a finished run is asked for before giving up on it.
+ */
+const HISTORY_ATTEMPTS = 12
+const HISTORY_RETRY_MS = 300
+
+/**
  * ComfyUI's websocket identifies each listener by a client id, and sends a run's events to the client that
  * queued it.
  */
@@ -118,6 +124,23 @@ function outcomeOf(history: ComfyHistory) {
 }
 
 /**
+ * The record of a run that has just ended.
+ *
+ * ComfyUI announces the end over the websocket a moment before it files the record, so a read made right
+ * away can come up empty. It is there within a few hundred milliseconds; this allows a few seconds.
+ */
+async function readFinishedHistory(promptId: string) {
+  for (let attempt = 0; attempt < HISTORY_ATTEMPTS; attempt++) {
+    const history = await readHistory(promptId).catch(() => null)
+    if (history) return history
+
+    await new Promise((resolve) => setTimeout(resolve, HISTORY_RETRY_MS))
+  }
+
+  return null
+}
+
+/**
  * Waits for a queued run to end, reporting its progress on the way.
  *
  * The websocket gives the live events; the run's history is polled as well, so a missed message or a dropped
@@ -147,7 +170,7 @@ export function watchPrompt(
 
       if (error) return reject(error)
 
-      const history = await readHistory(promptId).catch(() => null)
+      const history = await readFinishedHistory(promptId)
       if (history) resolve(history)
       else reject(new Error("ComfyUI finished the run but has no record of it"))
     }

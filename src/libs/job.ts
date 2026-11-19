@@ -30,6 +30,7 @@ export function toImageParams(input: ImageValidator): Media.ImageParams {
     count: input.count,
     steps: input.steps,
     cfg: input.cfg,
+    sampler: input.sampler,
     seed: input.seed ?? randomSeed(),
     shouldRemoveBackground: input.shouldRemoveBackground
   }
@@ -80,6 +81,7 @@ export function toVoiceParams(
  * Turns a validated video form into the parameters stored with the job.
  *
  * - Fast mode needs both Lightning LoRAs; without them the job runs the full schedule.
+ * - The steps asked for apply to the full schedule only. Fast mode always runs its own.
  * - A loop needs at least two keyframes, and cut-out frames need the frames to be saved at all.
  * - Without references the job draws its first frame, so it records which image model to use.
  *
@@ -102,7 +104,9 @@ export function toVideoParams(
 
   const hasFastModels = !!models?.video?.fastHighNoise && !!models.video.fastLowNoise
   const isFast = input.isFast && hasFastModels
-  const sampling = isFast ? VIDEO_SAMPLING.fast : VIDEO_SAMPLING.full
+  const sampling = isFast
+    ? VIDEO_SAMPLING.fast
+    : { ...VIDEO_SAMPLING.full, steps: input.steps }
 
   return {
     ok: true,
@@ -117,6 +121,8 @@ export function toVideoParams(
       isFast,
       steps: sampling.steps,
       cfg: sampling.cfg,
+      // Kept even in fast mode, where it does nothing, so turning fast mode off on a reuse brings it back
+      negative: input.negative,
       seed: input.seed ?? randomSeed(),
       shouldSaveFrames: input.shouldSaveFrames,
       shouldRemoveBackground: input.shouldSaveFrames && input.shouldRemoveBackground

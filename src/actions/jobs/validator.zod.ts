@@ -3,10 +3,12 @@ import { z } from "zod"
 import {
   ASPECTS,
   IMAGE_COUNTS,
+  IMAGE_SAMPLERS,
   IMAGE_TIERS,
   MAX_REFERENCES,
   VIDEO_RESOLUTIONS,
   VIDEO_SECONDS,
+  VIDEO_STEPS,
   VOICE_MAX_LINE_LENGTH,
   VOICE_MAX_LINES
 } from "@/constants"
@@ -40,6 +42,8 @@ export const imageValidator = z
     count: literals(IMAGE_COUNTS),
     steps: z.number().int().min(1).max(100),
     cfg: z.number().min(1).max(15),
+    // `null` is "Auto": the sampler that suits the mode
+    sampler: z.enum(IMAGE_SAMPLERS).nullable(),
     seed,
     shouldRemoveBackground: z.boolean()
   })
@@ -61,6 +65,9 @@ export const videoValidator = z.object({
   isStaticCamera: z.boolean(),
   isLoop: z.boolean(),
   isFast: z.boolean(),
+  // For the full schedule; fast mode has its own fixed count
+  steps: z.number().int().min(VIDEO_STEPS.min).max(VIDEO_STEPS.max),
+  negative: z.string().trim().max(2_000),
   seed,
   shouldSaveFrames: z.boolean(),
   shouldRemoveBackground: z.boolean()

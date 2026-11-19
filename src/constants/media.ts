@@ -83,6 +83,31 @@ export const IMAGE_QUALITIES = [
   { id: "fine", label: "Fine", steps: 50 }
 ] as const
 
+export const IMAGE_SAMPLERS = [
+  "euler_ancestral",
+  "euler",
+  "dpmpp_2m",
+  "er_sde"
+] as const satisfies readonly Media.ImageSampler[]
+
+export const IMAGE_SAMPLER_LABELS: Record<Media.ImageSampler, string> = {
+  euler_ancestral: "Euler a",
+  euler: "Euler",
+  dpmpp_2m: "DPM++ 2M",
+  er_sde: "ER SDE"
+}
+
+/**
+ * The sampler a job runs with when none is picked ("Auto").
+ *
+ * - A new image uses `er_sde`, which the Qwen-Image 2.1 model card recommends.
+ * - An edit uses `euler`: `er_sde` gave burnt, over-sharpened results with reference images on this setup.
+ */
+export const IMAGE_DEFAULT_SAMPLERS = {
+  create: "er_sde",
+  edit: "euler"
+} as const satisfies Record<string, Media.ImageSampler>
+
 export const IMAGE_DEFAULTS = {
   steps: 35,
   cfg: 5,
@@ -121,6 +146,13 @@ export const VIDEO_SAMPLING = {
   fast: { steps: 4, cfg: 1 },
   full: { steps: 20, cfg: 3.5 }
 } as const
+
+/**
+ * The steps that can be asked for on the full schedule. The high-noise model takes the first half and the
+ * low-noise model the rest, so there have to be a few for each. Fast mode is not adjustable: its LoRAs were
+ * made for exactly 4 steps.
+ */
+export const VIDEO_STEPS = { min: 4, max: 50 } as const
 
 /**
  * A voice job speaks one clip per line of its script.
