@@ -1,0 +1,21 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+@import "./theme.css";
+@import "./custom.css";
+
+@layer base {
+  html,
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /**
+   * Tailwind's preflight leaves buttons on the default arrow; anything pressable shows the pointer instead.
+   */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}

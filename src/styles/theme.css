@@ -1,0 +1,100 @@
+/**
+ * Frozen is dark-only: one cold palette laid over HeroUI's dark theme (`<html class="dark"
+ * data-theme="dark">`). HeroUI derives its hover, soft and focus colours from these with `color-mix()`, so
+ * only the base tokens are set here.
+ *
+ * The four palette colours, darkest to lightest:
+ *
+ *   night #131b2b · steel #2f4a63 · glacier #5b91a3 · frost #cfeae0
+ *
+ * Surfaces are night with a little steel mixed in, so each layer sits one step above the one below. Frost is
+ * the accent (primary buttons, selection); glacier marks focus and carries muted text.
+ */
+:root,
+.dark,
+[data-theme="dark"] {
+  --night: #131b2b;
+  --steel: #2f4a63;
+  --glacier: #5b91a3;
+  --frost: #cfeae0;
+
+  --radius: 0.625rem;
+
+  --background: var(--night);
+  --foreground: color-mix(in oklab, var(--frost) 80%, white);
+
+  --surface: color-mix(in oklab, var(--night) 82%, var(--steel));
+  --surface-foreground: var(--foreground);
+  --surface-secondary: color-mix(in oklab, var(--night) 66%, var(--steel));
+  --surface-secondary-foreground: var(--foreground);
+  --surface-tertiary: color-mix(in oklab, var(--night) 50%, var(--steel));
+  --surface-tertiary-foreground: var(--foreground);
+
+  --overlay: color-mix(in oklab, var(--night) 72%, var(--steel));
+  --overlay-foreground: var(--foreground);
+
+  --muted: color-mix(in oklab, var(--glacier) 76%, var(--frost));
+
+  --default: color-mix(in oklab, var(--night) 42%, var(--steel));
+  --default-foreground: var(--foreground);
+
+  --accent: var(--frost);
+  --accent-foreground: var(--night);
+
+  --field-background: color-mix(in oklab, var(--night) 92%, var(--steel));
+  --field-foreground: var(--foreground);
+  --field-placeholder: color-mix(in oklab, var(--glacier) 72%, var(--night));
+  --field-border: color-mix(in oklab, var(--steel) 85%, transparent);
+  --field-border-width: 1px;
+
+  --segment: color-mix(in oklab, var(--steel) 78%, var(--glacier));
+  --segment-foreground: var(--foreground);
+
+  --border: color-mix(in oklab, var(--steel) 72%, transparent);
+  --separator: color-mix(in oklab, var(--steel) 55%, transparent);
+  --focus: var(--glacier);
+  --link: var(--frost);
+
+  --success: #7fd6b0;
+  --success-foreground: var(--night);
+  --warning: #f2c879;
+  --warning-foreground: var(--night);
+  --danger: #f0717b;
+  --danger-foreground: #ffffff;
+
+  --backdrop: rgb(8 12 20 / 0.72);
+  --tooltip-delay: 400ms;
+  --tooltip-close-delay: 100ms;
+}
+
+/**
+ * `inline` so a utility resolves the variable on the element it styles: the font variables from `next/font`
+ * are set on `<body>`, not `:root`.
+ */
+@theme inline {
+  --color-night: var(--night);
+  --color-steel: var(--steel);
+  --color-glacier: var(--glacier);
+  --color-frost: var(--frost);
+
+  --font-sans: var(--font-geist), var(--font-thai), var(--font-japanese), sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --container-9xl: 110rem;
+}
+
+@theme {
+  --animate-indeterminate: indeterminate 1.4s ease-in-out infinite;
+
+  /**
+   * A bar sliding across its track, for progress without a number yet.
+   */
+  @keyframes indeterminate {
+    0% {
+      translate: -100% 0;
+    }
+    100% {
+      translate: 350% 0;
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "name": "project_frozen",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --parallel start:dev worker",
+    "start:dev": "next dev --hostname localhost --port 8190",
+    "start:prod": "next start --hostname localhost --port 8190",
+    "build": "rm -rf .next && next build",
+    "worker": "bun tests/worker.spec.ts",
+    "drizzle:studio": "drizzle-kit studio --port=3444",
+    "drizzle:generate": "drizzle-kit generate",
+    "drizzle:migrate": "drizzle-kit migrate",
+    "drizzle:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "@heroui/react": "^3.2.7",
+    "@heroui/styles": "^3.2.7",
+    "@hookform/resolvers": "^5.9.2",
+    "@keyline-icons/react": "^2.7.0",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "dotenv": "^18.0.9",
+    "drizzle-orm": "^1.0.0-rc.5-ab785fc",
+    "es-toolkit": "^1.53.0",
+    "next": "^16.4.3",
+    "nuqs": "^2.10.2",
+    "postgres": "^3.4.9",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-hook-form": "^7.91.0",
+    "redis": "^6.3.0",
+    "tailwind-merge": "^3.7.0",
+    "zod": "^4.6.7",
+    "zustand": "^5.0.16"
+  },
+  "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "^4.7.1",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/bun": "^1.4.4",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "drizzle-kit": "^1.0.0-rc.5-ab785fc",
+    "postcss": "^8.5.31",
+    "prettier": "~3.9.10",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "bun": "~1.4.x",
+    "node": "~24.x"
+  }
+}

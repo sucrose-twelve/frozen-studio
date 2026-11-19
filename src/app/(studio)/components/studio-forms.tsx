@@ -1,0 +1,83 @@
+"use client"
+
+import { ToggleButton, ToggleButtonGroup } from "@heroui/react"
+import { ImageSparkles, Scissors, VideoSparkles } from "@keyline-icons/react"
+import { useCallback, useEffect, useMemo } from "react"
+
+import { JOB_KIND_LABELS, JOB_KINDS } from "@/constants"
+import { useStore } from "@/hooks"
+
+import { useStudioQuery } from "../hooks/use-studio-query"
+import { CutoutForm } from "./cutout-form"
+import { ImageForm } from "./image-form"
+import { VideoForm } from "./video-form"
+
+const MODE_ICONS = {
+  image: ImageSparkles,
+  video: VideoSparkles,
+  cutout: Scissors
+} satisfies Record<Media.JobKind, unknown>
+
+/**
+ * The left panel: the mode switch and the three forms.
+ *
+ * All three stay mounted and only the chosen one shows, so switching modes never loses what was typed in
+ * the others. A prefill request from the canvas brings its form forward.
+ */
+export function StudioForms() {
+  const { query, setMode } = useStudioQuery()
+  const prefill = useStore((state) => state.prefill)
+  const mode = query.mode
+  const selectedKeys = useMemo(() => [mode], [mode])
+
+  const handleSelectionChange = useCallback(
+    (keys: Set<string | number>) => {
+      const [key] = keys
+      const next = JOB_KINDS.find((kind) => kind === key)
+      if (next) void setMode(next)
+    },
+    [setMode]
+  )
+
+  useEffect(() => {
+    if (prefill) void setMode(prefill.kind)
+  }, [prefill, setMode])
+
+  return (
+    <aside className='use-panel flex min-h-0 flex-col overflow-hidden'>
+      <div className='border-separator border-b p-4'>
+        <ToggleButtonGroup
+          aria-label='Mode'
+          selectionMode='single'
+          fullWidth
+          disallowEmptySelection
+          selectedKeys={selectedKeys}
+          onSelectionChange={handleSelectionChange}>
+          {JOB_KINDS.map((kind, index) => {
+            const Icon = MODE_ICONS[kind]
+
+            return (
+              <ToggleButton key={kind} id={kind} className='flex-1'>
+                {index > 0 ? <ToggleButtonGroup.Separator /> : null}
+                <Icon size={17} strokeWidth={1.75} />
+                {JOB_KIND_LABELS[kind]}
+              </ToggleButton>
+            )
+          })}
+        </ToggleButtonGroup>
+      </div>
+
+      <div className='min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-4'>
+        <div hidden={mode !== "image"} className='h-full'>
+          <ImageForm isActive={mode === "image"} />
+        </div>
+        <div hidden={mode !== "video"} className='h-full'>
+          <VideoForm isActive={mode === "video"} />
+        </div>
+        <div hidden={mode !== "cutout"} className='h-full'>
+          <CutoutForm isActive={mode === "cutout"} />
+        </div>
+      </div>
+    </aside>
+  )
+}

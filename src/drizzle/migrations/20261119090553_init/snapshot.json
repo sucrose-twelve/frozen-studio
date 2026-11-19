@@ -1,0 +1,710 @@
+{
+  "version": "8",
+  "dialect": "postgres",
+  "id": "204bacd2-b54f-4cd1-b87d-42dbb4c2a415",
+  "prevIds": [
+    "00000000-0000-0000-0000-000000000000"
+  ],
+  "ddl": [
+    {
+      "isRlsEnabled": true,
+      "name": "assets",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": true,
+      "name": "job_inputs",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": true,
+      "name": "jobs",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "varchar(20)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "varchar(20)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "role",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "varchar(10)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "root",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "path",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "varchar(50)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "mime_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "width",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "height",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "size_bytes",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "position",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "is_favorite",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "job_inputs"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "job_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "job_inputs"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "asset_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "job_inputs"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "position",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "job_inputs"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "job_inputs"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "job_inputs"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "jobs"
+    },
+    {
+      "type": "varchar(20)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "jobs"
+    },
+    {
+      "type": "varchar(20)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'queued'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "jobs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "''",
+      "generated": null,
+      "identity": null,
+      "name": "prompt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "jobs"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "params",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "jobs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "error",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "jobs"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "started_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "jobs"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "finished_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "jobs"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "jobs"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "jobs"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "root",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "path",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "assets_root_path_index",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "job_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "role",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "position",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "assets_job_role_position_index",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "role",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "assets_role_created_at_index",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "job_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "position",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "job_inputs_job_position_index",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "job_inputs"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "asset_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "job_inputs_asset_index",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "job_inputs"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "jobs_created_at_index",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "jobs"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "kind",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "jobs_kind_created_at_index",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "jobs"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "jobs_status_index",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "jobs"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "job_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "jobs",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "assets_job_id_jobs_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "assets"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "job_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "jobs",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "job_inputs_job_id_jobs_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "job_inputs"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "asset_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "assets",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "job_inputs_asset_id_assets_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "job_inputs"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "assets_pkey",
+      "schema": "public",
+      "table": "assets",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "job_inputs_pkey",
+      "schema": "public",
+      "table": "job_inputs",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "jobs_pkey",
+      "schema": "public",
+      "table": "jobs",
+      "entityType": "pks"
+    }
+  ],
+  "renames": []
+}

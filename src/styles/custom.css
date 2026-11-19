@@ -1,0 +1,57 @@
+@layer components {
+  /**
+   * The grey checkerboard behind images with transparency, so a cut-out reads as cut out.
+   */
+  .use-checkerboard {
+    --checker: color-mix(in oklab, var(--steel) 55%, transparent);
+    background-color: color-mix(in oklab, var(--night) 70%, var(--steel));
+    background-image:
+      linear-gradient(45deg, var(--checker) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--checker) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--checker) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--checker) 75%);
+    background-size: 16px 16px;
+    background-position:
+      0 0,
+      0 8px,
+      8px -8px,
+      -8px 0;
+  }
+
+  /**
+   * The dotted backdrop of the canvas, where results are shown.
+   */
+  .use-dot-grid {
+    background-image: radial-gradient(
+      color-mix(in oklab, var(--steel) 60%, transparent) 1px,
+      transparent 1px
+    );
+    background-size: 20px 20px;
+  }
+
+  /**
+   * A panel of the studio: one step above the page, with a hairline edge.
+   */
+  .use-panel {
+    @apply border-border bg-surface rounded-2xl border;
+  }
+
+  /**
+   * HeroUI fills a selected toggle with the soft accent, which on this dark palette comes out darker than
+   * an unselected one. Glacier makes the chosen option the brightest in its row instead.
+   */
+  .toggle-button {
+    --toggle-button-bg-selected: var(--glacier);
+    --toggle-button-bg-selected-hover: color-mix(
+      in oklab,
+      var(--glacier) 86%,
+      var(--frost)
+    );
+    --toggle-button-bg-selected-pressed: color-mix(
+      in oklab,
+      var(--glacier) 86%,
+      var(--frost)
+    );
+    --toggle-button-fg-selected: var(--night);
+  }
+}
