@@ -132,6 +132,12 @@ declare namespace Media {
   }
 
   /**
+   * The families of voice model. They differ in what a description can ask for, and each is loaded and
+   * spoken with in its own way; which one a model folder belongs to is read from its name (`voiceFamily`).
+   */
+  export type VoiceFamily = "parler" | "qwen" | "voxcpm"
+
+  /**
    * A voice job speaks its prompt, one clip per line.
    */
   export type VoiceParams = {
@@ -142,7 +148,8 @@ declare namespace Media {
      */
     voice: string
     /**
-     * What the model is told about the speaker, in English. This is what shapes the voice.
+     * What the model is told about the speaker. This is what shapes the voice; how much of it a model
+     * takes in depends on its family.
      */
     description: string
     seed: number

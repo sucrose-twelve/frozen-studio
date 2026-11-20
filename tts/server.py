@@ -1,11 +1,11 @@
 """
-Frozen's text-to-speech service: Japanese Parler-TTS behind a small local HTTP API.
+Frozen's text-to-speech service: the voice models behind a small local HTTP API.
 
 The queue worker starts this process when a voice job arrives and is its only client. It listens on
 127.0.0.1 and writes files only under --output-root.
 
     GET  /health    {"status": "ok", "loaded": false, "model": null, "device": null}
-    POST /generate  {"model": "<folder name>", "lines": [{"text": "...", "file": "<path>.wav"}],
+    POST /generate  {"model": "<folder name>", "engine": "parler", "lines": [{"text": "...", "file": "<path>.wav"}],
                      "description": "...", "seed": 1}
                     answers with one JSON object per line, as things happen:
                         {"event": "loading"}
@@ -14,9 +14,14 @@ The queue worker starts this process when a voice job arrives and is its only cl
                         {"event": "done"}  or  {"event": "error", "message": "..."}
     POST /unload    frees the model, and with it the VRAM, until the next /generate
 
-A model is a folder under --models-root, named in each request. It loads, with everything heavy (torch,
-transformers), on the first /generate that asks for it, so the process starts at once and holds no VRAM
-while nobody is using it. One model is held at a time: asking for another drops the one in memory first.
+A model is a folder under --models-root, named in each request together with its engine: the family of
+model it is, which decides how it is loaded and spoken with (see ENGINES). The families need different
+versions of the same libraries, so each Python environment runs its own copy of this service, and only
+has the packages of its own engines; the worker knows which one to ask.
+
+A model loads, with everything heavy (torch, transformers), on the first /generate that asks for it, so
+the process starts at once and holds no VRAM while nobody is using it. One model is held at a time: asking
+for another drops the one in memory first.
 
 The worker passes its own process id (--parent-pid). When that process is gone, the service exits rather
 than linger with the model in VRAM.
@@ -40,44 +45,46 @@ def log(message):
     print(f"[tts] {message}", file=sys.stderr, flush=True)
 
 
-class Voice:
-    """The model in use and its two tokenizers: loaded on first use, and swapped when another is asked for."""
+def seed_everything(seed):
+    """Makes a generation repeatable: the same seed, text and description give the same clip."""
+    import torch
 
-    def __init__(self, models_root):
-        self.models_root = models_root
-        # The folder name of the model in memory
-        self.name = None
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+class Engine:
+    """
+    One family of voice model: how it loads from a folder and speaks a line. `begin` is called once per
+    job, before its first line, and `release` when the model is dropped.
+    """
+
+    def __init__(self):
         self.model = None
         self.device = None
+
+    def begin(self):
+        pass
+
+    def release(self):
+        pass
+
+
+class ParlerEngine(Engine):
+    """
+    Japanese Parler-TTS. The description is read by a small text encoder that only knows the words of its
+    training captions (pitch, pace, expressiveness, recording quality), and the model has one female voice.
+    """
+
+    def __init__(self):
+        super().__init__()
         self.prompt_tokenizer = None
         self.description_tokenizer = None
         self.tagger = None
         self.kakasi = None
-        # One generation at a time: one GPU, and the worker sends one job at a time anyway
-        self.lock = threading.Lock()
 
-    @property
-    def is_loaded(self):
-        return self.model is not None
-
-    def folder(self, name):
-        """
-        The folder of a model, by name. Models are the folders directly under the models root, so a name
-        that is a path, or that names nothing there, is refused.
-        """
-        path = os.path.join(self.models_root, name)
-        if name in ("", ".", "..") or os.path.basename(name) != name or not os.path.isdir(path):
-            raise ValueError(f"no model named {name!r}")
-        return path
-
-    def load(self, name):
-        if self.is_loaded and self.name == name:
-            return
-
-        # One model at a time
-        self.unload()
-        model_dir = self.folder(name)
-        started = time.monotonic()
+    def load(self, model_dir):
         import torch
         from parler_tts import ParlerTTSForConditionalGeneration
         from transformers import AutoTokenizer
@@ -95,21 +102,6 @@ class Voice:
             model_dir, local_files_only=True
         ).to(self.device)
         self.model.eval()
-        self.name = name
-        log(f"{name} loaded on {self.device} in {time.monotonic() - started:.1f}s")
-
-    def unload(self):
-        if not self.is_loaded:
-            return
-
-        import torch
-
-        log(f"{self.name} unloaded")
-        self.model = None
-        self.name = None
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
 
     def add_ruby(self, text):
         """
@@ -147,20 +139,8 @@ class Voice:
 
         return "".join(pieces)
 
-    def speak(self, text, description, seed):
-        """
-        Generates one line of speech.
-
-        The same seed is set before every line, so the lines of a job share as much of the voice as the
-        description leaves open.
-
-        Returns the samples (mono float32) and the sample rate.
-        """
+    def speak(self, text, description):
         import torch
-
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(seed)
 
         described = self.description_tokenizer(description, return_tensors="pt").to(self.device)
         prompt = self.prompt_tokenizer(self.add_ruby(text), return_tensors="pt").to(self.device)
@@ -173,14 +153,182 @@ class Voice:
                 prompt_attention_mask=prompt.attention_mask,
             )
 
-        samples = generation.cpu().numpy().squeeze().astype("float32")
-        # The model speaks quietly, peaking around -10 dBFS, and not evenly from line to line. Every clip
-        # is brought up to the same peak so a set of lines sits at one level.
+        return generation.cpu().numpy().squeeze(), self.model.config.sampling_rate
+
+
+class QwenDesignEngine(Engine):
+    """
+    Qwen3-TTS VoiceDesign: the voice is made up from a description in plain language (age, gender, pitch,
+    mood, pace), which the model reads as an instruction. It speaks ten languages; the script here is
+    Japanese, and saying so keeps a line written only in kanji from being read as Chinese.
+
+    Every line is made up afresh from the description. The shared seed keeps the lines of a job close, but
+    not identical: holding one voice needs the family's voice-cloning model, which is not set up.
+    """
+
+    def load(self, model_dir):
+        import torch
+        from qwen_tts import Qwen3TTSModel
+
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.model = Qwen3TTSModel.from_pretrained(
+            model_dir,
+            device_map=self.device,
+            dtype=torch.bfloat16 if self.device != "cpu" else torch.float32,
+        )
+
+    def speak(self, text, description):
+        waves, sample_rate = self.model.generate_voice_design(
+            text=text, language="Japanese", instruct=description
+        )
+        return waves[0], sample_rate
+
+
+class VoxCpmEngine(Engine):
+    """
+    VoxCPM2: the description goes in parentheses in front of the text, and the model makes up a voice to
+    match. It works out the language from the text itself (thirty of them, Thai included) and speaks at
+    48 kHz.
+
+    A voice made up twice from one description is two different voices, even with the same seed. So only
+    the first line of a job is designed; the others clone that line's clip, which the same model can do,
+    and the job stays one speaker.
+    """
+
+    def __init__(self):
+        super().__init__()
+        # The first line's clip, on disk, for the later lines to clone
+        self.reference = None
+
+    def begin(self):
+        self.release()
+
+    def release(self):
+        if self.reference and os.path.exists(self.reference):
+            os.remove(self.reference)
+        self.reference = None
+
+    def load(self, model_dir):
+        import torch
+        from voxcpm import VoxCPM
+
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        # The denoiser only cleans up reference recordings for voice cloning, and is fetched from the
+        # network when asked for: neither is wanted here
+        self.model = VoxCPM.from_pretrained(model_dir, load_denoiser=False)
+
+    def speak(self, text, description):
+        import tempfile
+
+        import soundfile
+
+        sample_rate = self.model.tts_model.sample_rate
+        if self.reference:
+            wave = self.model.generate(
+                text=text, reference_wav_path=self.reference, cfg_value=2.0, inference_timesteps=10
+            )
+            return wave, sample_rate
+
+        # A closing parenthesis inside the description would end it early
+        described = description.replace("(", " ").replace(")", " ").strip()
+        wave = self.model.generate(
+            text=f"({described}){text}", cfg_value=2.0, inference_timesteps=10
+        )
+        handle, self.reference = tempfile.mkstemp(prefix="frozen-voice-", suffix=".wav")
+        os.close(handle)
+        soundfile.write(self.reference, wave, sample_rate)
+        return wave, sample_rate
+
+
+# The families of model this service can run, by the name the worker asks for them with. An environment
+# only has the packages of some of them; asking for another fails at its import, with a plain message.
+ENGINES = {"parler": ParlerEngine, "qwen": QwenDesignEngine, "voxcpm": VoxCpmEngine}
+
+
+class Voice:
+    """The model in use: loaded on first use, and swapped when another is asked for."""
+
+    def __init__(self, models_root):
+        self.models_root = models_root
+        # The folder name of the model in memory
+        self.name = None
+        self.engine = None
+        # One generation at a time: one GPU, and the worker sends one job at a time anyway
+        self.lock = threading.Lock()
+
+    @property
+    def is_loaded(self):
+        return self.engine is not None
+
+    @property
+    def device(self):
+        return self.engine.device if self.engine else None
+
+    def folder(self, name):
+        """
+        The folder of a model, by name. Models are the folders directly under the models root, so a name
+        that is a path, or that names nothing there, is refused.
+        """
+        path = os.path.join(self.models_root, name)
+        if name in ("", ".", "..") or os.path.basename(name) != name or not os.path.isdir(path):
+            raise ValueError(f"no model named {name!r}")
+        return path
+
+    def load(self, name, kind):
+        if self.is_loaded and self.name == name:
+            return
+
+        # One model at a time
+        self.unload()
+        model_dir = self.folder(name)
+        started = time.monotonic()
+        engine = ENGINES[kind]()
+        try:
+            engine.load(model_dir)
+        except ImportError as error:
+            raise RuntimeError(
+                f"this Python environment can't run {kind} models ({error.name} is not installed)"
+            ) from error
+
+        self.engine = engine
+        self.name = name
+        log(f"{name} loaded on {engine.device} in {time.monotonic() - started:.1f}s")
+
+    def unload(self):
+        if not self.is_loaded:
+            return
+
+        import torch
+
+        log(f"{self.name} unloaded")
+        self.engine.release()
+        self.engine = None
+        self.name = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    def speak(self, text, description, seed):
+        """
+        Generates one line of speech.
+
+        The same seed is set before every line, so the lines of a job share as much of the voice as the
+        description leaves open.
+
+        Returns the samples (mono float32) and the sample rate.
+        """
+        import numpy
+
+        seed_everything(seed)
+        samples, sample_rate = self.engine.speak(text, description)
+        samples = numpy.asarray(samples, dtype="float32").reshape(-1)
+        # The models don't speak at one level, from each other or from line to line (Parler peaks around
+        # -10 dBFS). Every clip is brought up to the same peak so a set of lines sits together.
         peak = float(abs(samples).max()) if samples.size else 0.0
         if peak > 0:
             samples = samples * (TARGET_PEAK / peak)
 
-        return samples, self.model.config.sampling_rate
+        return samples, int(sample_rate)
 
 
 def inside(root, file_path):
@@ -237,6 +385,10 @@ def make_handler(voice, output_root):
                 body = self.read_json()
                 model = str(body["model"])
                 voice.folder(model)
+                # Requests from before there was more than one family name none
+                kind = str(body.get("engine", "parler"))
+                if kind not in ENGINES:
+                    raise ValueError(f"no engine named {kind!r}")
                 lines = body["lines"]
                 description = str(body["description"])
                 seed = int(body["seed"])
@@ -262,10 +414,11 @@ def make_handler(voice, output_root):
                 with voice.lock:
                     if voice.name != model:
                         emit({"event": "loading"})
-                        voice.load(model)
+                        voice.load(model, kind)
 
                     import soundfile
 
+                    voice.engine.begin()
                     for index, line in enumerate(lines):
                         emit({"event": "line", "index": index})
                         started = time.monotonic()

@@ -25,6 +25,7 @@ next-env.d.ts
 
 # text to speech: the Python environment and the model weights
 /tts/.venv/
+/tts/.venv-design/
 /tts/models/
 __pycache__/
 

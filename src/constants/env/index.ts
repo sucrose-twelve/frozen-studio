@@ -52,7 +52,9 @@ export const COMFY = comfySchema.parse({
 export const TTS = ttsSchema.parse({
   port: process.env.TTS_PORT,
   python: process.env.TTS_PYTHON,
-  modelDir: process.env.TTS_MODEL_DIR
+  modelDir: process.env.TTS_MODEL_DIR,
+  designPort: process.env.TTS_DESIGN_PORT,
+  designPython: process.env.TTS_DESIGN_PYTHON
 })
 
 export const CAPTION = captionSchema.parse({

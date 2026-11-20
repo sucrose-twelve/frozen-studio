@@ -285,7 +285,7 @@ worker runs them with, and what a third one would use:
 ## The voice engine
 
 Voice jobs don't touch ComfyUI. `runVoiceJob` (`worker/voice.ts`) talks to
-`tts/server.py`, a small HTTP service around Japanese Parler-TTS that listens on
+`tts/server.py`, a small HTTP service around the voice models that listens on
 `127.0.0.1:<TTS_PORT>`:
 
 | Request          | Does                                                                                                 |
@@ -294,9 +294,18 @@ Voice jobs don't touch ComfyUI. `runVoiceJob` (`worker/voice.ts`) talks to
 | `POST /generate` | Speaks `lines` (`{ text, file }`) with one `description` and `seed`; streams one JSON event per line |
 | `POST /unload`   | Drops the model, and its VRAM, until the next `/generate`                                            |
 
-- **Installed or not** is read from disk, by `findVoiceModels()`: the environment's
-  Python, the script, and at least one model folder with weights and the two tokenizers.
-  That is all `Engine.Models.voice` means; nothing is started to find out.
+- **Three families of model** (`Media.VoiceFamily`, read from the folder's name by
+  `voiceFamily`): VoxCPM2 (the default), Qwen3-TTS VoiceDesign and Japanese Parler-TTS.
+  Each is an `Engine` class in `server.py` (how it loads, how it speaks a line), and a
+  request names the one its model needs (`engine`).
+- **Two Python environments, so the service runs twice.** Parler-TTS needs an older
+  transformers than the other two can run with. `tts/.venv` runs it on `TTS_PORT`;
+  `tts/.venv-design` runs Qwen3-TTS and VoxCPM2 on `TTS_DESIGN_PORT`. The worker picks the
+  service by the model's family (`FAMILY_ENVIRONMENT`), and `claimGpu` has the other one
+  drop its model.
+- **Installed or not** is read from disk, by `findVoiceModels()`: the script, and every
+  model folder that holds its family's files (`IS_MODEL`) and whose environment has its
+  Python. That is all `Engine.Models.voice` means; nothing is started to find out.
 - **The worker owns the process.** It starts the service for the first voice job
   (`startVoiceEngine`), reuses one that already answers, and stops it on exit. The service
   is given the worker's process id and exits when that process is gone, so a killed worker
@@ -311,20 +320,29 @@ Voice jobs don't touch ComfyUI. `runVoiceJob` (`worker/voice.ts`) talks to
 - **Events** from `/generate` (`loading`, `line`, `saved`, `done`, `error`) become
   progress labels ("Loading the voice model", "Speaking · 2 / 5") and, for `saved`, an
   `assets` row of kind `audio`.
-- **The voice** is not a speaker id. The model is told what the speaker sounds like in
-  English (`params.description`); the presets in `VOICE_PRESETS` are such descriptions,
-  and "JSUT" in one names a speaker the model knows. It only has female voices.
-- **The text** gets furigana before it is spoken (`add_ruby`), because the model was
-  trained that way and misreads bare kanji. Each clip is normalised to one peak level.
-- **Python packages** are pinned in `tts/requirements.txt`, with the reason next to each
-  pin that isn't obvious. PyTorch must be the CUDA 12.8 build for RTX 50-series cards.
+- **The voice** is not a speaker id. The model is told what the speaker sounds like
+  (`params.description`), and the presets in `VOICE_PRESETS` are such descriptions, a set
+  per family, since the families read them differently. Parler-TTS only knows the words of
+  its training captions (pitch, pace, tone, recording) and has one female voice; "JSUT"
+  names it. The other two make a voice up from plain words. The form's advice per family
+  is `VOICE_FAMILY_NOTES`.
+- **One job, one speaker.** Every line gets the same seed. That is enough for Parler-TTS.
+  A voice made up twice from one description is two voices, so VoxCPM2 only designs the
+  first line and clones its clip for the rest (`VoxCpmEngine`); Qwen3-TTS would need its
+  cloning model for that, which isn't set up, and its lines can differ a little.
+- **The text** gets furigana before Parler-TTS speaks it (`add_ruby`), because that model
+  was trained that way and misreads bare kanji. Qwen3-TTS is told the script is Japanese;
+  VoxCPM2 works the language out. Each clip is normalised to one peak level.
+- **Python packages** are in `tts/requirements.txt` and `tts/requirements-design.txt`,
+  with the reason next to each pin that isn't obvious. PyTorch must be the CUDA 12.8 build
+  for RTX 50-series cards.
 
 A request can be tried by hand, with the service started in a terminal:
 
 ```sh
-tts/.venv/Scripts/python.exe tts/server.py --models-root tts/models --output-root D:/tmp
+tts/.venv-design/Scripts/python.exe tts/server.py --models-root tts/models --output-root D:/tmp
 curl -s -X POST http://127.0.0.1:8191/generate -H "Content-Type: application/json" \
-  -d '{"model":"japanese-parler-tts-mini","lines":[{"text":"こんにちは。","file":"D:/tmp/a/hello.wav"}],"description":"JSUT speaks at a moderate pace in a very clear recording.","seed":1}'
+  -d '{"model":"VoxCPM2","engine":"voxcpm","lines":[{"text":"こんにちは。","file":"D:/tmp/a/hello.wav"}],"description":"A calm woman with a warm voice.","seed":1}'
 ```
 
 ## The caption engine

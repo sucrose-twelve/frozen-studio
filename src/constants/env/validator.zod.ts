@@ -30,11 +30,18 @@ export const redisSchema = z.object({
  *
  * `modelDir` is the model the Voice form starts on. The other model folders beside it can be picked in the
  * form.
+ *
+ * There are two environments, because the families need different versions of the same libraries, and
+ * the same service runs once from each: `designPython` on `designPort` for the models that make a voice up
+ * from a free description (VoxCPM2, Qwen3-TTS), and `python` on `port` for Japanese Parler-TTS. Either
+ * can be left uninstalled.
  */
 export const ttsSchema = z.object({
   port: z.string().transform(Number).default(8191),
   python: z.string().default("tts/.venv/Scripts/python.exe"),
-  modelDir: z.string().default("tts/models/japanese-parler-tts-mini")
+  modelDir: z.string().default("tts/models/VoxCPM2"),
+  designPort: z.string().transform(Number).default(8193),
+  designPython: z.string().default("tts/.venv-design/Scripts/python.exe")
 })
 
 /**

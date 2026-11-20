@@ -11,6 +11,8 @@ import {
   IMAGE_FAMILY_SAMPLING,
   LORA_STRENGTH,
   VIDEO_SAMPLING,
+  VOICE_CUSTOM,
+  VOICE_FAMILIES,
   VOICE_PRESETS
 } from "@/constants"
 
@@ -55,12 +57,23 @@ export const VIDEO_FORM_DEFAULTS: VideoValidator = {
   shouldRemoveBackground: false
 }
 
+/**
+ * The preset a family's form starts on: its first.
+ */
+export function defaultVoicePreset(family: Media.VoiceFamily) {
+  const [preset] = VOICE_PRESETS[family]
+  return { voice: preset?.id ?? VOICE_CUSTOM, description: preset?.description ?? "" }
+}
+
+/**
+ * The Voice form before a model is picked: the first family's first preset. Picking a model of another
+ * family swaps in that family's.
+ */
 export const VOICE_FORM_DEFAULTS: VoiceValidator = {
   kind: "voice",
   model: "",
   prompt: "",
-  voice: VOICE_PRESETS[0].id,
-  description: VOICE_PRESETS[0].description,
+  ...defaultVoicePreset(VOICE_FAMILIES[0]),
   seed: null
 }
 
@@ -77,7 +90,8 @@ export const CAPTION_FORM_DEFAULTS: CaptionValidator = {
  * The name of a voice: its preset's label, or "Custom" for a description written by hand.
  */
 export function voiceLabel(voice: string) {
-  return VOICE_PRESETS.find((preset) => preset.id === voice)?.label ?? "Custom"
+  const presets = VOICE_FAMILIES.flatMap((family) => VOICE_PRESETS[family])
+  return presets.find((preset) => preset.id === voice)?.label ?? "Custom"
 }
 
 /**

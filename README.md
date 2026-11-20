@@ -4,14 +4,14 @@ A local media studio: a web UI for generating images, videos and voice lines, an
 describing images, with models that run on this machine. Forms on the left, the result on
 the right, every result kept in a gallery.
 
-| Mode    | What it does                                                                                                                                                                                                                              | Model                            |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| Image   | Text to image, or an edit / mix of up to 4 reference images (Qwen-Image, and MOSS-Image with its edit LoRA). Can also save a transparent cutout of the result                                                                             | Qwen-Image 2.1, MOSS-Image, Iris |
-| Video   | Text to video, image to video, or a video through up to 6 keyframes (optionally looping). Frames can be saved, cut out, and built into a sprite sheet, exported as a zip (PNG sheet, a README with frame count and speed, a WebM preview) | Wan 2.2 I2V, LTX 2.5             |
-| Cutout  | Background removal for up to 12 images at once                                                                                                                                                                                            | BiRefNet                         |
-| Voice   | Japanese text to speech: a script becomes one WAV clip per line, in a voice shaped by a description                                                                                                                                       | Japanese Parler-TTS              |
-| Caption | Image and text to text: a detailed description of each image with a positive and a negative prompt that ask for it again, or an answer to whatever the prompt asks about it. The text can be sent on to the Image or Video form           | Ministral 3 8B                   |
-| Gallery | Every result, with favorites. A result can be rerolled, have its settings reused, or be sent on to another form                                                                                                                           | —                                |
+| Mode    | What it does                                                                                                                                                                                                                              | Model                                   |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Image   | Text to image, or an edit / mix of up to 4 reference images (Qwen-Image, and MOSS-Image with its edit LoRA). Can also save a transparent cutout of the result                                                                             | Qwen-Image 2.1, MOSS-Image, Iris        |
+| Video   | Text to video, image to video, or a video through up to 6 keyframes (optionally looping). Frames can be saved, cut out, and built into a sprite sheet, exported as a zip (PNG sheet, a README with frame count and speed, a WebM preview) | Wan 2.2 I2V, LTX 2.5                    |
+| Cutout  | Background removal for up to 12 images at once                                                                                                                                                                                            | BiRefNet                                |
+| Voice   | Text to speech, Japanese first: a script becomes one WAV clip per line, in a voice shaped by a description                                                                                                                                | VoxCPM2, Qwen3-TTS, Japanese Parler-TTS |
+| Caption | Image and text to text: a detailed description of each image with a positive and a negative prompt that ask for it again, or an answer to whatever the prompt asks about it. The text can be sent on to the Image or Video form           | Ministral 3 8B                          |
+| Gallery | Every result, with favorites. A result can be rerolled, have its settings reused, or be sent on to another form                                                                                                                           | —                                       |
 
 ## How it fits together
 
@@ -57,7 +57,7 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
   | Cutout | any model in `models/background_removal`                                                                                                                                                                                                                                                                                                  |
 
 - For Voice (optional): [uv](https://docs.astral.sh/uv/) to set up its Python environment,
-  and about 10 GB of disk
+  and about 12 GB of disk for the default model, 4 GB more for the second
 - For Caption (optional): uv again, about 16 GB of disk, and a card with 12 GB of VRAM or
   more
 - For GGUF text encoders (optional): stable-diffusion.cpp, about 1.3 GB of disk
@@ -78,21 +78,38 @@ files from disk.
 
 ### Voice (optional)
 
-The text-to-speech service has its own Python environment in `tts/.venv` and its model in
-`tts/models`; neither is committed. From the project root:
+The text-to-speech service has its own Python environment and its models in `tts/models`;
+neither is committed. The models that make a voice up from a free description (a girl, an
+old man) share one environment, `tts/.venv-design`. From the project root:
+
+```sh
+uv venv tts/.venv-design --python 3.12
+uv pip install --python tts/.venv-design/Scripts/python.exe torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+uv pip install --python tts/.venv-design/Scripts/python.exe -r tts/requirements-design.txt
+tts/.venv-design/Scripts/python.exe tts/download_model.py
+tts/.venv-design/Scripts/python.exe tts/download_model.py qwen
+```
+
+That is about 3.3 GB of PyTorch (the CUDA 12.8 build, which RTX 50-series cards need) in
+an environment of about 7 GB, and the models:
+[VoxCPM2](https://huggingface.co/openbmb/VoxCPM2), 4.6 GB, the one the Voice form starts
+on, and
+[Qwen3-TTS VoiceDesign](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign), 4.2
+GB, which can be left out. Restart the worker afterwards; the Voice form unlocks once it
+sees an environment and a model in place, and lists every model whose folder is in
+`tts/models`. There is nothing to start by hand.
+
+A third model,
+[Japanese Parler-TTS](https://huggingface.co/2121-8/japanese-parler-tts-mini) (3.5 GB), is
+still supported. It has one female voice and reads little of a description, and it needs
+older libraries, so it gets an environment of its own:
 
 ```sh
 uv venv tts/.venv --python 3.12
 uv pip install --python tts/.venv/Scripts/python.exe torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 uv pip install --python tts/.venv/Scripts/python.exe -r tts/requirements.txt
-tts/.venv/Scripts/python.exe tts/download_model.py
+tts/.venv/Scripts/python.exe tts/download_model.py parler
 ```
-
-That is about 3.3 GB of PyTorch (the CUDA 12.8 build, which RTX 50-series cards need), a
-few hundred MB of other packages, and a 3.5 GB model
-([2121-8/japanese-parler-tts-mini](https://huggingface.co/2121-8/japanese-parler-tts-mini)).
-Restart the worker afterwards; the Voice form unlocks once it sees the environment and the
-model in place. There is nothing to start by hand.
 
 ### stable-diffusion.cpp (optional)
 
@@ -226,10 +243,15 @@ Conventions for the code live in `.claude/skills/web-stack/`.
 - **Negative prompts** work in the Image form always, and in the Video form only with Fast
   mode off: the 4-step schedule ignores them, and the full one takes about two minutes per
   second of video. Voice has none; its description does the steering.
-- **Voice.** The model speaks Japanese, with female voices only: asking for a man lowers
-  the pitch a little and nothing more. A line may be up to 160 characters, about the 30
-  seconds the model can speak in one go. The first job after an image or video job takes
-  longer, while the voice model loads back into VRAM.
+- **Voice.** What a description can do depends on the model. VoxCPM2, the default, and
+  Qwen3-TTS make the voice up from the description: one sentence came out around 350 Hz
+  for "a high school girl" and 120 Hz for "a man in his forties". With VoxCPM2 the first
+  line sets the voice and the others copy it, and it works out the script's language by
+  itself, Thai included; with Qwen3-TTS every line is made up afresh, so the lines of a
+  job can differ a little. Japanese Parler-TTS has one female voice and reads only pitch,
+  pace, tone and recording quality: the same sentence stays between about 246 and 300 Hz
+  whatever the description says. A line may be up to 160 characters. The first job after
+  an image or video job takes longer, while the voice model loads back into VRAM.
 - **Caption.** A caption takes about a minute: half of it is the model loading, which the
   next caption in a row doesn't pay again. The description and the positive prompt are
   read from the image; the negative prompt can't be, and is the model's advice for that

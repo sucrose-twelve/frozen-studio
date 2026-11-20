@@ -8,30 +8,30 @@ import { useForm, useWatch } from "react-hook-form"
 
 import { createJob } from "@/actions/jobs/create"
 import { voiceValidator, type VoiceValidator } from "@/actions/jobs/validator.zod"
-import { VOICE_CUSTOM, VOICE_MAX_LINES, VOICE_PRESETS } from "@/constants"
+import {
+  VOICE_CUSTOM,
+  VOICE_FAMILIES,
+  VOICE_FAMILY_NOTES,
+  VOICE_MAX_LINES,
+  VOICE_PRESETS
+} from "@/constants"
 import { useEngine, useStore } from "@/hooks"
 import { scriptLines } from "@/libs/job"
+import { voiceFamily } from "@/libs/voice-model"
 
 import { useDefaultModel } from "../hooks/use-default-model"
 import { useStudioQuery } from "../hooks/use-studio-query"
-import { parseSeed, VOICE_FORM_DEFAULTS, voiceLabel } from "../utils"
+import { defaultVoicePreset, parseSeed, VOICE_FORM_DEFAULTS, voiceLabel } from "../utils"
 import { FieldMessage, FieldRow, FormDivider, FormSection } from "./form-parts"
 import { ModelSelect } from "./model-select"
 import { SubmitBar } from "./submit-bar"
 
-const VOICE_OPTIONS = [
-  ...VOICE_PRESETS.map((preset) => ({
-    id: preset.id as string,
-    label: preset.label as string
-  })),
-  { id: VOICE_CUSTOM, label: voiceLabel(VOICE_CUSTOM) }
-]
-
 /**
- * The Voice form: a script in Japanese, spoken one clip per line by Japanese Parler-TTS.
+ * The Voice form: a script, spoken one clip per line by the chosen model.
  *
- * The voice isn't picked from a list of speakers. The model is told what the speaker sounds like, in
- * English, and the presets are such descriptions; editing one makes it a custom voice.
+ * The voice isn't picked from a list of speakers. The model is told what the speaker sounds like, and
+ * the presets are such descriptions; editing one makes it a custom voice. What a description can ask for
+ * depends on the model's family, so the presets and the advice under them change with the model.
  */
 export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
   const engine = useEngine()
@@ -53,6 +53,16 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
     () => (models ?? []).map((name) => ({ id: name, label: name })),
     [models]
   )
+  // With no model yet, the form shows the first family's presets (VOICE_FORM_DEFAULTS)
+  const family = model ? voiceFamily(model) : VOICE_FAMILIES[0]
+  const notes = VOICE_FAMILY_NOTES[family]
+  const voiceOptions = useMemo(
+    () => [
+      ...VOICE_PRESETS[family].map((preset) => ({ id: preset.id, label: preset.label })),
+      { id: VOICE_CUSTOM, label: voiceLabel(VOICE_CUSTOM) }
+    ],
+    [family]
+  )
 
   const lineCount = useMemo(() => scriptLines(prompt).length, [prompt])
   const blocker = !engine
@@ -65,8 +75,18 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
       ? "Every line of the script becomes its own clip."
       : `${lineCount} ${lineCount === 1 ? "clip" : "clips"} · ${voiceLabel(voice)}`
 
+  // Another family reads descriptions differently, so its own first preset replaces the one on screen
   const handleModelChange = useCallback(
-    (value: string) => form.setValue("model", value),
+    (value: string) => {
+      const previous = form.getValues("model")
+      const next = voiceFamily(value)
+      if (next !== (previous ? voiceFamily(previous) : VOICE_FAMILIES[0])) {
+        const preset = defaultVoicePreset(next)
+        form.setValue("voice", preset.voice)
+        form.setValue("description", preset.description, { shouldValidate: true })
+      }
+      form.setValue("model", value)
+    },
     [form]
   )
   // Typing in the description makes the voice the user's own, whichever preset it started from
@@ -81,13 +101,13 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
         return
       }
 
-      const preset = VOICE_PRESETS.find((item) => item.id === key)
+      const preset = VOICE_PRESETS[family].find((item) => item.id === key)
       if (!preset) return
 
       form.setValue("voice", preset.id)
       form.setValue("description", preset.description, { shouldValidate: true })
     },
-    [form]
+    [form, family]
   )
   const handleSeedChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) =>
@@ -148,7 +168,7 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
 
       <FormSection
         title='Script'
-        note={`${lineCount} / ${VOICE_MAX_LINES} lines · Japanese`}>
+        note={`${lineCount} / ${VOICE_MAX_LINES} lines · ${notes.languages}`}>
         <TextArea
           aria-label='Script'
           lang='ja'
@@ -177,7 +197,7 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
           </Select.Trigger>
           <Select.Popover>
             <ListBox>
-              {VOICE_OPTIONS.map((option) => (
+              {voiceOptions.map((option) => (
                 <ListBox.Item key={option.id} id={option.id} textValue={option.label}>
                   {option.label}
                   <ListBox.ItemIndicator />
@@ -193,17 +213,14 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
             rows={4}
             variant='secondary'
             className='resize-y'
-            placeholder='In English: who is speaking, how high or low, how fast, in what tone, and how the recording sounds.'
+            placeholder={notes.placeholder}
             // Registered on every render like the other fields: a reset drops the fields react-hook-form
             // knows, and only a fresh `register` hands this one back to it
             {...form.register("description", { onChange: handleDescriptionChange })}
           />
           <FieldMessage message={errors.description?.message} />
         </FieldRow>
-        <p className='text-muted text-xs'>
-          The description is what shapes the voice: pitch, pace, tone. This model only has
-          female voices.
-        </p>
+        <p className='text-muted text-xs'>{notes.hint}</p>
       </FormSection>
 
       <FormDivider />
