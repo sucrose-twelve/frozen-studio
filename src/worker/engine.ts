@@ -7,6 +7,7 @@ import { redis } from "@/libs/redis"
 
 import { findCaptionModels } from "./caption"
 import { readVramUsers } from "./gpu"
+import { withSdCppModels } from "./sdcpp"
 import { findVoiceModels } from "./voice"
 
 const NO_COMFY_MODELS: ComfyModels = { image: null, video: null, cutout: null }
@@ -55,8 +56,9 @@ export async function isAnotherWorkerRunning() {
 }
 
 /**
- * Everything that can run right now: what ComfyUI has, and the voice and caption engines, which are
- * installed beside this project and don't need ComfyUI at all.
+ * Everything that can run right now: what ComfyUI has, what stable-diffusion.cpp adds to its image models,
+ * and the voice and caption engines, which are installed beside this project and don't need ComfyUI at
+ * all.
  */
 function allModels(): Engine.Models {
   const voice = findVoiceModels()
@@ -64,6 +66,7 @@ function allModels(): Engine.Models {
 
   return {
     ...state.models,
+    image: withSdCppModels(state.models.image),
     voice: voice.length > 0 ? { models: voice } : null,
     caption: caption.length > 0 ? { models: caption } : null
   }

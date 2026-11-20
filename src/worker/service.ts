@@ -238,14 +238,15 @@ export function findModelFolders(
  * so before a job everything else gives its VRAM back: the other services' models, and ComfyUI's unless the
  * job runs on ComfyUI itself. Jobs of one kind in a row pay nothing.
  *
- * @param keep - The service about to work, which keeps its model. Left out before a ComfyUI job
+ * @param user - Who works next, and so keeps its models: a service, `"comfy"` for a ComfyUI job, or
+ *   `null` for an engine that holds nothing between jobs (stable-diffusion.cpp)
  */
-export async function claimGpu(keep?: PythonService) {
-  const others = services.filter((service) => service !== keep)
+export async function claimGpu(user: PythonService | "comfy" | null) {
+  const others = services.filter((service) => service !== user)
   const unloaded = await Promise.all(others.map((service) => service.unload()))
   let hasFreed = unloaded.some(Boolean)
 
-  if (keep && (await isComfyOnline())) {
+  if (user !== "comfy" && (await isComfyOnline())) {
     await freeComfyMemory().catch(() => undefined)
     hasFreed = true
   }

@@ -4,7 +4,9 @@ import type {
   VideoValidator,
   VoiceValidator
 } from "@/actions/jobs/validator.zod"
-import { IMAGE_SIZES, VIDEO_SAMPLING } from "@/constants"
+import { IMAGE_SIZES, IMAGE_TURBO, VIDEO_SAMPLING } from "@/constants"
+
+import { imageEngine, isTurboImageModel, listImageModels } from "./image-model"
 
 /**
  * A fresh seed under 2^48, the range the validators accept.
@@ -16,24 +18,35 @@ export function randomSeed() {
 /**
  * Turns a validated image form into the parameters stored with the job: the pixel size behind the aspect and
  * tier, and a seed when none was given.
+ *
+ * - A Turbo model runs its own schedule whatever the form says, so that is what gets stored.
+ * - The cut-out copy is made by ComfyUI in the same run, so a job on stable-diffusion.cpp has none; the
+ *   result's own "Cut out" button does it afterwards.
  */
 export function toImageParams(input: ImageValidator): Media.ImageParams {
   const size = input.aspect ? IMAGE_SIZES[input.aspect][input.tier] : null
+  const sampling = isTurboImageModel(input.model)
+    ? { steps: IMAGE_TURBO.steps, cfg: IMAGE_TURBO.cfg, sampler: null }
+    : { steps: input.steps, cfg: input.cfg, sampler: input.sampler }
 
   return {
     kind: "image",
     model: input.model,
+    textEncoder: input.textEncoder,
+    // Kept for a Turbo model too, where it does nothing, so a reuse on another model brings it back
     negative: input.negative,
     aspect: input.aspect,
     tier: input.tier,
     width: size?.[0] ?? null,
     height: size?.[1] ?? null,
     count: input.count,
-    steps: input.steps,
-    cfg: input.cfg,
-    sampler: input.sampler,
+    steps: sampling.steps,
+    cfg: sampling.cfg,
+    sampler: sampling.sampler,
+    lora: input.lora ? { name: input.lora, strength: input.loraStrength } : null,
     seed: input.seed ?? randomSeed(),
-    shouldRemoveBackground: input.shouldRemoveBackground
+    shouldRemoveBackground:
+      input.shouldRemoveBackground && imageEngine(input.textEncoder) === "comfy"
   }
 }
 
@@ -132,7 +145,7 @@ export function toVideoParams(
   }
 
   const isTextToVideo = input.references.length === 0
-  const imageModel = models?.image?.models[0] ?? null
+  const imageModel = listImageModels(models?.image)[0] ?? null
   if (isTextToVideo && !imageModel) {
     return {
       ok: false,

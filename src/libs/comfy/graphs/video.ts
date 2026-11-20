@@ -1,10 +1,11 @@
 import {
-  IMAGE_DEFAULTS,
+  IMAGE_FAMILY_SAMPLING,
   IMAGE_SIZES,
   STATIC_CAMERA_PROMPT,
   VIDEO_FPS,
   WAN_NEGATIVE_PROMPT
 } from "@/constants"
+import { imageFamily } from "@/libs/image-model"
 import { planSegments, videoSize } from "@/libs/video-plan"
 
 import {
@@ -13,7 +14,7 @@ import {
   type GraphReference,
   type NodeRef
 } from "./builder"
-import { addQwenImage } from "./image"
+import { addImage } from "./image"
 import { loadReference, outputPrefix, removeBackground } from "./shared"
 
 /**
@@ -55,23 +56,24 @@ export function buildVideoGraph(input: {
       loadReference(builder, reference, `Reading image ${index + 1}`)
     )
   } else {
-    if (!models.image || !params.imageModel) {
+    if (!params.imageModel) {
       throw new Error("Text-to-video needs the image model to draw the first frame")
     }
 
     const [width, height] = IMAGE_SIZES[params.aspect].standard
-    const still = addQwenImage(builder, {
+    const sampling = IMAGE_FAMILY_SAMPLING[imageFamily(params.imageModel)]
+    const still = addImage(builder, models.image, {
       model: params.imageModel,
-      textEncoder: models.image.textEncoder,
-      vae: models.image.vae,
+      textEncoder: null,
       prompt,
       negative: "",
       references: [],
       size: { width, height },
       count: 1,
-      steps: IMAGE_DEFAULTS.steps,
-      cfg: IMAGE_DEFAULTS.cfg,
+      steps: sampling.steps,
+      cfg: sampling.cfg,
       sampler: null,
+      lora: null,
       seed: params.seed
     })
     const savedStill = builder.add("SaveImage", {

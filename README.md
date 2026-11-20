@@ -4,14 +4,14 @@ A local media studio: a web UI for generating images, videos and voice lines, an
 describing images, with models that run on this machine. Forms on the left, the result on
 the right, every result kept in a gallery.
 
-| Mode    | What it does                                                                                                                                                                                                                              | Model               |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| Image   | Text to image, or an edit / mix of up to 4 reference images. Can also save a transparent cutout of the result                                                                                                                             | Qwen-Image 2.1      |
-| Video   | Text to video, image to video, or a video through up to 6 keyframes (optionally looping). Frames can be saved, cut out, and built into a sprite sheet, exported as a zip (PNG sheet, a README with frame count and speed, a WebM preview) | Wan 2.2 I2V         |
-| Cutout  | Background removal for up to 12 images at once                                                                                                                                                                                            | BiRefNet            |
-| Voice   | Japanese text to speech: a script becomes one WAV clip per line, in a voice shaped by a description                                                                                                                                       | Japanese Parler-TTS |
-| Caption | Image and text to text: a detailed description of each image with a positive and a negative prompt that ask for it again, or an answer to whatever the prompt asks about it. The text can be sent on to the Image or Video form           | Ministral 3 8B      |
-| Gallery | Every result, with favorites. A result can be rerolled, have its settings reused, or be sent on to another form                                                                                                                           | —                   |
+| Mode    | What it does                                                                                                                                                                                                                              | Model                            |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Image   | Text to image, or an edit / mix of up to 4 reference images (Qwen-Image only). Can also save a transparent cutout of the result                                                                                                           | Qwen-Image 2.1, MOSS-Image, Iris |
+| Video   | Text to video, image to video, or a video through up to 6 keyframes (optionally looping). Frames can be saved, cut out, and built into a sprite sheet, exported as a zip (PNG sheet, a README with frame count and speed, a WebM preview) | Wan 2.2 I2V                      |
+| Cutout  | Background removal for up to 12 images at once                                                                                                                                                                                            | BiRefNet                         |
+| Voice   | Japanese text to speech: a script becomes one WAV clip per line, in a voice shaped by a description                                                                                                                                       | Japanese Parler-TTS              |
+| Caption | Image and text to text: a detailed description of each image with a positive and a negative prompt that ask for it again, or an answer to whatever the prompt asks about it. The text can be sent on to the Image or Video form           | Ministral 3 8B                   |
+| Gallery | Every result, with favorites. A result can be rerolled, have its settings reused, or be sent on to another form                                                                                                                           | —                                |
 
 ## How it fits together
 
@@ -21,6 +21,7 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
    │ SSE        │  └────── Redis       queue (list), engine status (key), events + control (pub/sub)
    └────────────┘             ▲
                               │            ┌──► ComfyUI ──────────► images, videos
+                              │            ├──► sdcpp/ (sd-cli) ──► images from GGUF text encoders
                            Worker ─────────┼──► tts/server.py ────► voice clips
                                            └──► caption/server.py ► descriptions and prompts
 ```
@@ -32,8 +33,10 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
   `assets` rows.
 - Images, videos and cutouts run on **ComfyUI**, which is started separately. Voice runs
   on a small **text-to-speech service** in `tts/` and captions on a **captioning service**
-  in `caption/`; the worker starts each itself when a job needs it. They all share the
-  GPU: whichever works next gets the VRAM the others were holding.
+  in `caption/`; the worker starts each itself when a job needs it. An image job whose
+  text encoder is a GGUF runs on **stable-diffusion.cpp** instead, a program in `sdcpp/`
+  the worker runs once per job. They all share the GPU: whichever works next gets the VRAM
+  the others were holding.
 - Progress reaches the browser as Server-Sent Events: the worker publishes to Redis,
   `/api/events` relays it.
 - Media stays where ComfyUI puts it. Frozen writes into a `frozen/` subfolder of ComfyUI's
@@ -45,17 +48,18 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
 - Postgres and Redis (e.g. Docker in WSL), with an empty database for the app
 - ComfyUI 0.44+ running on this machine, with:
 
-  | For    | Files (matched by name)                                                                                       |
-  | ------ | ------------------------------------------------------------------------------------------------------------- |
-  | Image  | a Qwen-Image 2.1 diffusion model, the `qwen3vl` text encoder, `qwen_image_2.1_vae`                            |
-  | Video  | Wan 2.2 I2V high- and low-noise GGUFs (needs the ComfyUI-GGUF node), the `umt5` text encoder, the Wan 2.1 VAE |
-  | Fast   | the `wan2.2_i2v_lightx2v` high- and low-noise LoRAs (optional: 4-step videos)                                 |
-  | Cutout | any model in `models/background_removal`                                                                      |
+  | For    | Files (matched by name)                                                                                                                                                                                                                                                         |
+  | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | Image  | a Qwen-Image 2.1 diffusion model (safetensors or GGUF, a Turbo build included), a `qwen3vl` 8B text encoder as safetensors, `qwen_image_2.1_vae`. And / or a MOSS-Image diffusion model, the `qwen3.5_9b` text encoder, `flux2-vae` (optional: LoRAs with `moss` in their name) |
+  | Video  | Wan 2.2 I2V high- and low-noise GGUFs (needs the ComfyUI-GGUF node), the `umt5` text encoder, the Wan 2.1 VAE                                                                                                                                                                   |
+  | Fast   | the `wan2.2_i2v_lightx2v` high- and low-noise LoRAs (optional: 4-step videos)                                                                                                                                                                                                   |
+  | Cutout | any model in `models/background_removal`                                                                                                                                                                                                                                        |
 
 - For Voice (optional): [uv](https://docs.astral.sh/uv/) to set up its Python environment,
   and about 10 GB of disk
 - For Caption (optional): uv again, about 16 GB of disk, and a card with 12 GB of VRAM or
   more
+- For GGUF text encoders (optional): stable-diffusion.cpp, about 1.3 GB of disk
 
 A mode whose models are missing is disabled in the UI with a note saying what it needs.
 
@@ -88,6 +92,31 @@ few hundred MB of other packages, and a 3.5 GB model
 ([2121-8/japanese-parler-tts-mini](https://huggingface.co/2121-8/japanese-parler-tts-mini)).
 Restart the worker afterwards; the Voice form unlocks once it sees the environment and the
 model in place. There is nothing to start by hand.
+
+### stable-diffusion.cpp (optional)
+
+ComfyUI can't use a Qwen3-VL text encoder that comes as a GGUF (the abliterated ones are
+published that way).
+[stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) can, and Frozen
+runs it for the jobs that pick such an encoder. From its
+[releases](https://github.com/leejet/stable-diffusion.cpp/releases), unpack into
+`sdcpp/bin` (not committed):
+
+- `sd-…-bin-win-cuda12-x64.zip`, the program (`sd-cli.exe`), about 390 MB
+- `cudart-sd-bin-win-cu12-x64.zip`, the CUDA libraries it needs beside it, about 540 MB
+
+It takes model files from the folders in `SDCPP_MODEL_DIRS` (`sdcpp/models` unless set),
+searched with their subfolders. Add ComfyUI's models folder there, after a `;`, and both
+engines use one copy of a file. Two sets of files are recognised, by name:
+
+- a Turbo build of Qwen-Image 2.1 as a GGUF, a `qwen3vl` 8B text encoder as a GGUF, and
+  `qwen_image_2.1_vae`
+- an Iris model as a GGUF (`iris` in its name) and a `qwen3vl` 4B text encoder as a GGUF;
+  Iris needs no VAE, and ComfyUI can't run it at all
+
+Restart the worker afterwards: with a Turbo model picked, the Image form's Text encoder
+list then offers the GGUF encoders, marked "sd.cpp", and Iris models appear in its Model
+list.
 
 ### Caption (optional)
 
@@ -176,6 +205,7 @@ src/
 └── worker/       The queue worker
 tts/              The text-to-speech service (Python): server.py, requirements.txt
 caption/          The captioning service (Python): server.py, requirements.txt
+sdcpp/            stable-diffusion.cpp, unpacked here (not committed)
 launcher/         Frozen.ps1: starts ComfyUI, the app and the worker in one click
 ```
 
@@ -202,6 +232,30 @@ Conventions for the code live in `.claude/skills/web-stack/`.
 - **Models.** The Image, Video, Voice and Caption forms each start with a Model list of
   what is installed for them: the Qwen-Image files and the Wan 2.2 high/low pairs ComfyUI
   has, and the model folders under `tts/models` and `caption/models`. Nothing needs
-  editing in `.env` to switch.
+  editing in `.env` to switch. The Image form also lists the text encoders that fit its
+  model.
+- **MOSS-Image** is a second family in the Image form, with its own text encoder and VAE.
+  Picking it switches the form to its settings (25 steps, CFG 2.5). It only draws new
+  images here: its editing needs a separate LoRA that isn't set up. A LoRA made for it can
+  be picked under Advanced, with a strength; most LoRAs only show their effect with their
+  trigger word at the start of the prompt.
+- **Iris** is a third family in the Image form, a smaller model that draws pixels directly
+  (no VAE). It runs on stable-diffusion.cpp only, with 30 steps at CFG 3; 20 steps is
+  close, and it takes a negative prompt. It only draws new images.
+- **Turbo image models** (a Qwen-Image 2.1 file with "Turbo" in its name) draw in 8 steps,
+  about 15 seconds an image. Their schedule is fixed: the steps, guidance and sampler
+  can't be changed, and a negative prompt is not read. They only draw new images: given a
+  reference image they return it burnt, so the form keeps edits on the other models.
+- **GGUF image models.** A GGUF made with stable-diffusion.cpp carries no metadata, and
+  ComfyUI-GGUF then can't tell what model it is ("Unknown model architecture"). It loads
+  once the file names its architecture: copy it with gguf-py, adding
+  `general.architecture` (`qwen_image` for Qwen-Image 2.1). A Qwen3-VL text encoder as a
+  GGUF does not work in ComfyUI at all: it recognises that encoder by its vision half,
+  which a GGUF leaves out.
+- **stable-diffusion.cpp** is what runs a job with such a GGUF text encoder, and every
+  Iris job. It is only set up for new images, on Turbo models and on Iris, and it loads
+  its models for every job: a Turbo image takes about 15 seconds however many came before,
+  an Iris image about 30 at its 30 steps. It can't save the cut-out copy in the same job;
+  "Cut out" on the result does that.
 - **Deleting a job** deletes its files from disk. Uploaded reference images are kept.
 - **No sign-in.** The app listens on localhost only.

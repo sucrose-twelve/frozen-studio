@@ -8,6 +8,7 @@ import {
   IMAGE_COUNTS,
   IMAGE_SAMPLERS,
   IMAGE_TIERS,
+  LORA_STRENGTH,
   MAX_REFERENCES,
   VIDEO_RESOLUTIONS,
   VIDEO_SECONDS,
@@ -39,6 +40,7 @@ export const imageValidator = z
     negative: z.string().trim().max(2_000),
     references: z.array(z.uuid()).max(MAX_REFERENCES.image),
     model: z.string().min(1, { error: "Pick a model" }),
+    textEncoder: z.string().min(1, { error: "Pick a text encoder" }),
     // `null` follows the first reference image
     aspect: z.enum(ASPECTS).nullable(),
     tier: z.enum(IMAGE_TIERS),
@@ -47,6 +49,9 @@ export const imageValidator = z
     cfg: z.number().min(1).max(15),
     // `null` is "Auto": the sampler that suits the mode
     sampler: z.enum(IMAGE_SAMPLERS).nullable(),
+    // `null` runs the model without one; the strength is kept either way, for the next pick
+    lora: z.string().min(1).nullable(),
+    loraStrength: z.number().min(LORA_STRENGTH.min).max(LORA_STRENGTH.max),
     seed,
     shouldRemoveBackground: z.boolean()
   })

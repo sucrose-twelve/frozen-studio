@@ -14,6 +14,7 @@ import {
   waitForComfy
 } from "./engine"
 import { processJob, runsOnComfy, type RunControl } from "./process"
+import { stopSdCpp } from "./sdcpp"
 import { stopServices } from "./service"
 
 const STOPPED_MESSAGE = "Interrupted: the worker stopped while this job was running"
@@ -79,7 +80,7 @@ async function runJob(jobId: string) {
   let job = await readJob(jobId)
   if (job?.status !== "queued") return
 
-  if (runsOnComfy(job.kind)) {
+  if (runsOnComfy(job.params)) {
     await waitForComfy(
       () =>
         void publishEvent({
@@ -170,6 +171,7 @@ export async function startWorker() {
       await finishJob(current.jobId, "failed", STOPPED_MESSAGE).catch(() => undefined)
     }
     stopServices()
+    stopSdCpp()
 
     const client = await redis()
     await client.del(REDIS_KEYS.engine).catch(() => undefined)

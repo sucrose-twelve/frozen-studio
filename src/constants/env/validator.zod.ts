@@ -49,6 +49,27 @@ export const captionSchema = z.object({
 })
 
 /**
+ * stable-diffusion.cpp, the second image engine: a program the worker runs once per job, for the model
+ * files ComfyUI can't read (text encoders as GGUF).
+ *
+ * - `cli` is its `sd-cli` executable, relative to the project root.
+ * - `modelDirs` are the folders it may take model files from, separated by `;`, searched with their
+ *   subfolders. Adding ComfyUI's own models folder lets both engines share one copy of a file.
+ */
+export const sdCppSchema = z.object({
+  cli: z.string().default("sdcpp/bin/sd-cli.exe"),
+  modelDirs: z
+    .string()
+    .default("sdcpp/models")
+    .transform((value) =>
+      value
+        .split(";")
+        .map((folder) => folder.trim())
+        .filter(Boolean)
+    )
+})
+
+/**
  * Where the ComfyUI engine listens and where it keeps its files. The directories must be the ones ComfyUI
  * was started with (`--input-directory` / `--output-directory`): the worker hands it paths relative to them,
  * and the app reads the same files from disk.

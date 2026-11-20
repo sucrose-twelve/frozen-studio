@@ -7,6 +7,7 @@ import { useMemo, useState } from "react"
 
 import type { AssetView, JobDetail } from "@/actions/jobs/read"
 import { IMAGE_SAMPLER_LABELS } from "@/constants"
+import { imageEngine } from "@/libs/image-model"
 import { cls, formatElapsed } from "@/libs/utils"
 
 import { OptionGroup, type Option } from "./option-group"
@@ -31,6 +32,8 @@ function describe(job: JobDetail, asset: AssetView) {
     facts.push(`${params.steps} steps · CFG ${params.cfg}`)
     // Only a sampler that was picked by hand is worth a chip; "Auto" is the usual case
     if (params.sampler) facts.push(IMAGE_SAMPLER_LABELS[params.sampler])
+    if (params.lora) facts.push(`LoRA ${params.lora.strength}`)
+    if (imageEngine(params.textEncoder) === "sdcpp") facts.push("sd.cpp")
     facts.push(`seed ${params.seed}`)
   }
   if (params.kind === "video") {

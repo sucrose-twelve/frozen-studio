@@ -16,6 +16,7 @@ import type { BuiltGraph, GraphOutput } from "@/libs/comfy/graphs/builder"
 import { buildCutoutGraph } from "@/libs/comfy/graphs/cutout"
 import { buildImageGraph } from "@/libs/comfy/graphs/image"
 import { buildVideoGraph } from "@/libs/comfy/graphs/video"
+import { imageEngine } from "@/libs/image-model"
 import { assetFilePath, comfyImageName, mimeTypeOf, readPngFileSize } from "@/libs/media"
 import { publishEvent } from "@/libs/queue"
 import { aspectRatioOf, videoSize } from "@/libs/video-plan"
@@ -23,6 +24,7 @@ import { aspectRatioOf, videoSize } from "@/libs/video-plan"
 import { runCaptionJob } from "./caption"
 import { clientId, watchPrompt } from "./comfy-socket"
 import { currentModels } from "./engine"
+import { runSdCppJob } from "./sdcpp"
 import { claimGpu } from "./service"
 import { runVoiceJob } from "./voice"
 
@@ -45,11 +47,12 @@ type Size = {
 }
 
 /**
- * Whether a kind of job runs on ComfyUI. Voice and caption jobs have services of their own and don't need
- * ComfyUI to be up.
+ * Whether a job runs on ComfyUI, and so has to wait for it to be up. Voice and caption jobs have services
+ * of their own, and an image job with a GGUF text encoder runs on stable-diffusion.cpp.
  */
-export function runsOnComfy(kind: Media.JobKind) {
-  return kind !== "voice" && kind !== "caption"
+export function runsOnComfy(params: Media.JobParams) {
+  if (params.kind === "voice" || params.kind === "caption") return false
+  return params.kind !== "image" || imageEngine(params.textEncoder) === "comfy"
 }
 
 /**
@@ -114,7 +117,8 @@ async function collectAssets(
 
 /**
  * Runs one job and saves what it produced: voice jobs on the text-to-speech service, caption jobs on the
- * captioning service, everything else on ComfyUI. Status changes are the caller's.
+ * captioning service, image jobs with a GGUF text encoder on stable-diffusion.cpp, everything else on
+ * ComfyUI. Status changes are the caller's.
  *
  * @param job - A job already marked `running`
  * @param control - Receives the way to stop the run; a cancel that arrived earlier is honoured
@@ -124,9 +128,12 @@ async function collectAssets(
 export async function processJob(job: Job, control: RunControl) {
   if (job.params.kind === "voice") return runVoiceJob(job, job.params, control)
   if (job.params.kind === "caption") return runCaptionJob(job, job.params, control)
+  if (job.params.kind === "image" && imageEngine(job.params.textEncoder) === "sdcpp") {
+    return runSdCppJob(job, job.params, control)
+  }
 
   // ComfyUI's models need the whole card, so the services' models give their VRAM back first
-  await claimGpu()
+  await claimGpu("comfy")
 
   const inputs = await db
     .select(pick(assetColumns, ["id", "root", "path", "width", "height"]))

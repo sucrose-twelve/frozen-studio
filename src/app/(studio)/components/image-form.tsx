@@ -1,6 +1,14 @@
 "use client"
 
-import { Input, Label, NumberField, TextArea, toast } from "@heroui/react"
+import {
+  Input,
+  Label,
+  ListBox,
+  NumberField,
+  Select,
+  TextArea,
+  toast
+} from "@heroui/react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { ImageSparkles } from "@keyline-icons/react"
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -12,20 +20,31 @@ import { imageValidator, type ImageValidator } from "@/actions/jobs/validator.zo
 import {
   ASPECTS,
   IMAGE_COUNTS,
-  IMAGE_DEFAULT_SAMPLERS,
-  IMAGE_QUALITIES,
+  IMAGE_FAMILY_LABELS,
+  IMAGE_FAMILY_SAMPLING,
   IMAGE_SAMPLER_LABELS,
   IMAGE_SAMPLERS,
   IMAGE_SIZES,
   IMAGE_TIER_LABELS,
   IMAGE_TIERS,
+  IMAGE_TURBO,
+  LORA_STRENGTH,
   MAX_REFERENCES
 } from "@/constants"
 import { useEngine, useStore } from "@/hooks"
+import {
+  canEditImages,
+  imageEngine,
+  imageFamily,
+  isGgufFile,
+  isTurboImageModel,
+  listImageModels,
+  textEncodersFor
+} from "@/libs/image-model"
 
 import { useDefaultModel } from "../hooks/use-default-model"
 import { useStudioQuery } from "../hooks/use-studio-query"
-import { IMAGE_FORM_DEFAULTS, modelLabel, parseSeed } from "../utils"
+import { IMAGE_FORM_DEFAULTS, loraLabel, modelLabel, parseSeed } from "../utils"
 import {
   FieldMessage,
   FieldRow,
@@ -49,10 +68,10 @@ const SAMPLER_OPTIONS: Option<SamplerChoice>[] = [
   }))
 ]
 
-const QUALITY_OPTIONS: Option<number>[] = IMAGE_QUALITIES.map((quality) => ({
-  value: quality.steps,
-  label: quality.label
-}))
+/**
+ * The "no LoRA" choice of the LoRA list. A LoRA's own id is its file name, which always has an extension.
+ */
+const NO_LORA = "none"
 
 const TIER_OPTIONS: Option<Media.ImageTier>[] = IMAGE_TIERS.map((tier) => ({
   value: tier,
@@ -65,7 +84,8 @@ const COUNT_OPTIONS: Option<number>[] = IMAGE_COUNTS.map((count) => ({
 }))
 
 /**
- * The Image form: text to image, or an edit when reference images are added. Qwen-Image 2.1 does both.
+ * The Image form: text to image, or an edit when reference images are added. Qwen-Image 2.1 does both;
+ * MOSS-Image, Iris and the Turbo builds only draw new images.
  */
 export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
   const engine = useEngine()
@@ -78,28 +98,80 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
     defaultValues: IMAGE_FORM_DEFAULTS
   })
   const { errors, isSubmitting } = form.formState
-  const [model, aspect, tier, count, steps, cfg, sampler, seed, shouldRemoveBackground] =
-    useWatch({
-      control: form.control,
-      name: [
-        "model",
-        "aspect",
-        "tier",
-        "count",
-        "steps",
-        "cfg",
-        "sampler",
-        "seed",
-        "shouldRemoveBackground"
-      ]
-    })
+  const [
+    model,
+    textEncoder,
+    aspect,
+    tier,
+    count,
+    steps,
+    cfg,
+    sampler,
+    lora,
+    loraStrength,
+    seed,
+    shouldRemoveBackground
+  ] = useWatch({
+    control: form.control,
+    name: [
+      "model",
+      "textEncoder",
+      "aspect",
+      "tier",
+      "count",
+      "steps",
+      "cfg",
+      "sampler",
+      "lora",
+      "loraStrength",
+      "seed",
+      "shouldRemoveBackground"
+    ]
+  })
 
-  const models = engine?.models.image?.models
+  const installed = engine?.models.image
+  const models = useMemo(
+    () => (installed === undefined ? undefined : listImageModels(installed)),
+    [installed]
+  )
   const firstModel = models?.[0]
+  // What the chosen model's family has: its text encoders, its LoRAs, and how it is sampled
+  const family = imageFamily(model)
+  const sampling = IMAGE_FAMILY_SAMPLING[family]
+  const familyModels = installed?.[family]
+  const textEncoders = useMemo(
+    () => (familyModels ? textEncodersFor(familyModels, model) : undefined),
+    [familyModels, model]
+  )
+  const loras = familyModels?.loras
+  // A GGUF text encoder moves the job to stable-diffusion.cpp
+  const isSdCpp = imageEngine(textEncoder) === "sdcpp"
+  const canEdit = canEditImages(model)
   const modelOptions = useMemo(
     () => (models ?? []).map((name) => ({ id: name, label: modelLabel(name) })),
     [models]
   )
+  const textEncoderOptions = useMemo(
+    () =>
+      (textEncoders ?? []).map((name) => ({
+        id: name,
+        label: isGgufFile(name) ? `${modelLabel(name)} · sd.cpp` : modelLabel(name)
+      })),
+    [textEncoders]
+  )
+  // A Turbo model runs its own fixed schedule: the sampling settings show it and can't be changed
+  const isTurbo = isTurboImageModel(model)
+  const shownSteps = isTurbo ? IMAGE_TURBO.steps : steps
+  const shownCfg = isTurbo ? IMAGE_TURBO.cfg : cfg
+  const qualityOptions = useMemo<Option<number>[]>(
+    () =>
+      sampling.qualities.map((quality) => ({
+        value: quality.steps,
+        label: quality.label
+      })),
+    [sampling]
+  )
+  const hasLoras = !!loras && loras.length > 0
   const hasCutoutModel = !!engine?.models.cutout
   const hasReferences = references.length > 0
 
@@ -114,15 +186,19 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
     ? IMAGE_SIZES[aspect][tier].join(" × ")
     : "Follows the first reference"
 
-  const isPresetQuality = IMAGE_QUALITIES.some((quality) => quality.steps === steps)
+  const isPresetQuality = sampling.qualities.some((quality) => quality.steps === steps)
 
   const blocker = !engine
     ? "The worker is offline, so the installed models are unknown."
-    : !engine.isComfyOnline
-      ? "ComfyUI is offline. Start it to load the image model."
-      : !firstModel
-        ? "Qwen-Image 2.1 isn't installed in ComfyUI."
-        : null
+    : !firstModel
+      ? engine.isComfyOnline
+        ? "No image model is installed."
+        : "ComfyUI is offline. Start it to load its image models."
+      : !engine.isComfyOnline && !isSdCpp
+        ? "ComfyUI is offline, and this model runs on it."
+        : hasReferences && !canEdit
+          ? "This model only draws new images. Remove the references, or pick another model to edit them."
+          : null
 
   const handleReferencesChange = useCallback(
     (assets: AssetView[]) => {
@@ -139,8 +215,24 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
     [form]
   )
 
+  // Another family is sampled differently, so its own settings replace the ones on screen; a LoRA only
+  // fits the family it was made for
   const handleModelChange = useCallback(
-    (value: string) => form.setValue("model", value),
+    (value: string) => {
+      const previous = form.getValues("model")
+      const next = imageFamily(value)
+      if (next !== (previous ? imageFamily(previous) : "qwen")) {
+        form.setValue("steps", IMAGE_FAMILY_SAMPLING[next].steps)
+        form.setValue("cfg", IMAGE_FAMILY_SAMPLING[next].cfg)
+        form.setValue("sampler", null)
+        form.setValue("lora", null)
+      }
+      form.setValue("model", value)
+    },
+    [form]
+  )
+  const handleTextEncoderChange = useCallback(
+    (value: string) => form.setValue("textEncoder", value),
     [form]
   )
   const handleAspectChange = useCallback(
@@ -167,12 +259,28 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
         "steps",
         typeof value === "number" && Number.isFinite(value)
           ? Math.round(value)
-          : IMAGE_FORM_DEFAULTS.steps
+          : sampling.steps
       ),
-    [form]
+    [form, sampling]
   )
   const handleCfgChange = useCallback(
-    (value: number | undefined) => form.setValue("cfg", value ?? IMAGE_FORM_DEFAULTS.cfg),
+    (value: number | undefined) => form.setValue("cfg", value ?? sampling.cfg),
+    [form, sampling]
+  )
+  const handleLoraChange = useCallback(
+    (key: unknown) => {
+      if (typeof key === "string") form.setValue("lora", key === NO_LORA ? null : key)
+    },
+    [form]
+  )
+  const handleLoraStrengthChange = useCallback(
+    (value: number | undefined) =>
+      form.setValue(
+        "loraStrength",
+        typeof value === "number" && Number.isFinite(value)
+          ? value
+          : LORA_STRENGTH.initial
+      ),
     [form]
   )
   const handleSamplerChange = useCallback(
@@ -204,6 +312,12 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
   )
 
   useDefaultModel(models, model, handleModelChange)
+  useDefaultModel(textEncoders, textEncoder, handleTextEncoderChange)
+
+  // A LoRA that is gone (deleted since, or brought in by "Reuse settings" from an old job) is dropped
+  useEffect(() => {
+    if (lora && loras && !loras.includes(lora)) form.setValue("lora", null)
+  }, [lora, loras, form])
 
   // A result sent here from the canvas: its settings, its images, or both
   useEffect(() => {
@@ -225,12 +339,16 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
         prompt: prefill.source.prompt,
         negative: params.negative,
         model: params.model,
+        // An old job has none; the effect above then picks the first one installed
+        textEncoder: params.textEncoder ?? "",
         aspect: params.aspect,
         tier: params.tier,
         count: params.count as ImageValidator["count"],
         steps: params.steps,
         cfg: params.cfg,
         sampler: params.sampler ?? null,
+        lora: params.lora?.name ?? null,
+        loraStrength: params.lora?.strength ?? LORA_STRENGTH.initial,
         seed: params.seed,
         shouldRemoveBackground: params.shouldRemoveBackground
       })
@@ -265,6 +383,19 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
         value={model}
         onChange={handleModelChange}
       />
+      <ModelSelect
+        title='Text encoder'
+        label='Text encoder'
+        models={textEncoderOptions}
+        value={textEncoder}
+        onChange={handleTextEncoderChange}
+      />
+      {isSdCpp ? (
+        <p className='text-muted -mt-3 text-xs'>
+          This text encoder is a GGUF, which only stable-diffusion.cpp reads: the job runs
+          there instead of on ComfyUI, and loads its models anew every time.
+        </p>
+      ) : null}
 
       <FormSection title='Prompt'>
         <TextArea
@@ -298,12 +429,19 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
 
       <FormSection title='Output' note={sizeNote}>
         <FieldRow
-          label={isPresetQuality ? "Quality" : `Quality · custom, ${steps} steps`}>
+          label={
+            isTurbo
+              ? `Quality · Turbo, ${IMAGE_TURBO.steps} steps`
+              : isPresetQuality
+                ? "Quality"
+                : `Quality · custom, ${steps} steps`
+          }>
           <OptionGroup
             label='Quality'
-            value={steps}
-            options={QUALITY_OPTIONS}
+            value={shownSteps}
+            options={qualityOptions}
             onChange={handleStepsChange}
+            isDisabled={isTurbo}
           />
         </FieldRow>
         <FieldRow label='Aspect'>
@@ -339,12 +477,14 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
       <SwitchField
         label='Also save a cutout'
         description={
-          hasCutoutModel
-            ? "A second copy with the background removed, as a transparent PNG."
-            : "Needs a background removal model in ComfyUI."
+          !hasCutoutModel
+            ? "Needs a background removal model in ComfyUI."
+            : isSdCpp
+              ? "Not in a stable-diffusion.cpp job. Use Cut out on the result instead."
+              : "A second copy with the background removed, as a transparent PNG."
         }
-        isSelected={shouldRemoveBackground && hasCutoutModel}
-        isDisabled={!hasCutoutModel}
+        isSelected={shouldRemoveBackground && hasCutoutModel && !isSdCpp}
+        isDisabled={!hasCutoutModel || isSdCpp}
         onChange={handleRemoveBackgroundChange}
       />
 
@@ -357,21 +497,40 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
             fullWidth
             rows={2}
             variant='secondary'
+            disabled={isTurbo}
             placeholder='What to avoid. Leave empty unless something keeps showing up.'
             {...form.register("negative")}
           />
+          {isTurbo ? (
+            <p className='text-muted text-xs'>
+              A Turbo model runs without guidance, so it never reads a negative prompt.
+              Pick another model to use one.
+            </p>
+          ) : null}
         </FieldRow>
         <FieldRow label='Sampler'>
           <OptionGroup
             label='Sampler'
-            value={sampler ?? "auto"}
+            value={isTurbo ? IMAGE_TURBO.sampler : (sampler ?? "auto")}
             options={SAMPLER_OPTIONS}
             onChange={handleSamplerChange}
+            isDisabled={isTurbo}
           />
           <p className='text-muted text-xs'>
-            Auto uses {IMAGE_SAMPLER_LABELS[IMAGE_DEFAULT_SAMPLERS.create]} for a new
-            image and {IMAGE_SAMPLER_LABELS[IMAGE_DEFAULT_SAMPLERS.edit]} for an edit, the
-            two that are known to work. The others are there to experiment with.
+            {isTurbo ? (
+              <>
+                A Turbo model was made for one schedule: {IMAGE_TURBO.steps} steps with{" "}
+                {IMAGE_SAMPLER_LABELS[IMAGE_TURBO.sampler]} at CFG {IMAGE_TURBO.cfg}. The
+                sampler, steps and guidance are fixed.
+              </>
+            ) : (
+              <>
+                {sampling.samplers.create === sampling.samplers.edit
+                  ? `Auto uses ${IMAGE_SAMPLER_LABELS[sampling.samplers.create]}, the one ${IMAGE_FAMILY_LABELS[family]} is known to work with.`
+                  : `Auto uses ${IMAGE_SAMPLER_LABELS[sampling.samplers.create]} for a new image and ${IMAGE_SAMPLER_LABELS[sampling.samplers.edit]} for an edit, the two that are known to work.`}{" "}
+                The others are there to experiment with.
+              </>
+            )}
           </p>
         </FieldRow>
         <div className='grid grid-cols-2 gap-3'>
@@ -381,7 +540,8 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
             minValue={1}
             maxValue={100}
             step={1}
-            value={steps}
+            isDisabled={isTurbo}
+            value={shownSteps}
             onChange={handleStepsInput}>
             <Label className='text-muted text-xs'>Steps</Label>
             <NumberField.Group>
@@ -396,7 +556,8 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
             minValue={1}
             maxValue={15}
             step={0.5}
-            value={cfg}
+            isDisabled={isTurbo}
+            value={shownCfg}
             onChange={handleCfgChange}>
             <Label className='text-muted text-xs'>Guidance (CFG)</Label>
             <NumberField.Group>
@@ -406,9 +567,62 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
             </NumberField.Group>
           </NumberField>
         </div>
+        {isTurbo ? null : (
+          <p className='text-muted text-xs'>
+            Quality picks {sampling.qualities.map((quality) => quality.steps).join(", ")}{" "}
+            steps. Any number from 1 to 100 can be typed here instead.
+          </p>
+        )}
+        <div className='grid grid-cols-[1fr_8rem] gap-3'>
+          <FieldRow label='LoRA'>
+            <Select
+              aria-label='LoRA'
+              fullWidth
+              variant='secondary'
+              isDisabled={!hasLoras}
+              value={lora && loras?.includes(lora) ? lora : NO_LORA}
+              onChange={handleLoraChange}>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  <ListBox.Item id={NO_LORA} textValue='None'>
+                    None
+                    <ListBox.ItemIndicator />
+                  </ListBox.Item>
+                  {(loras ?? []).map((name) => (
+                    <ListBox.Item key={name} id={name} textValue={loraLabel(name)}>
+                      {loraLabel(name)}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
+          </FieldRow>
+          <NumberField
+            fullWidth
+            variant='secondary'
+            minValue={LORA_STRENGTH.min}
+            maxValue={LORA_STRENGTH.max}
+            step={LORA_STRENGTH.step}
+            isDisabled={!hasLoras || !lora}
+            value={loraStrength}
+            onChange={handleLoraStrengthChange}>
+            <Label className='text-muted text-xs'>Strength</Label>
+            <NumberField.Group>
+              <NumberField.DecrementButton />
+              <NumberField.Input />
+              <NumberField.IncrementButton />
+            </NumberField.Group>
+          </NumberField>
+        </div>
         <p className='text-muted text-xs'>
-          Quality picks {IMAGE_QUALITIES.map((quality) => quality.steps).join(", ")}{" "}
-          steps. Any number from 1 to 100 can be typed here instead.
+          {hasLoras
+            ? "A LoRA changes what the model draws, or how. Most need their trigger word at the start of the prompt: see the LoRA's own page."
+            : `No LoRA for ${IMAGE_FAMILY_LABELS[family]} is installed.`}
         </p>
         <FieldRow label='Seed'>
           <Input
@@ -424,7 +638,7 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
       </FormSection>
 
       <SubmitBar
-        summary={`${steps} steps · CFG ${cfg} · ${count} ${count === 1 ? "image" : "images"}`}
+        summary={`${shownSteps} steps · CFG ${shownCfg} · ${count} ${count === 1 ? "image" : "images"}`}
         blocker={blocker}
         label={hasReferences ? "Edit image" : "Generate image"}
         icon={<ImageSparkles size={18} strokeWidth={1.75} />}

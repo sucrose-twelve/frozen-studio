@@ -20,8 +20,9 @@ Frozen is a local media studio: a web UI that generates images, videos and voice
 with models that run on this machine (text/image to image, text/image to video, background
 removal, sprite sheets, Japanese text to speech, image to text). The Next.js app only
 reads and writes Postgres and Redis; a separate worker process is the one client of the
-engines: ComfyUI, the text-to-speech service in `tts/` and the captioning service in
-`caption/`. There is no sign-in, and the app listens on localhost only.
+engines: ComfyUI, stable-diffusion.cpp in `sdcpp/`, the text-to-speech service in `tts/`
+and the captioning service in `caption/`. There is no sign-in, and the app listens on
+localhost only.
 
 ## Notes
 

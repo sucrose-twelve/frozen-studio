@@ -31,6 +31,17 @@ declare namespace Media {
   export type ImageTier = "standard" | "large" | "extra"
 
   /**
+   * The model families the Image form can run. Each has its own text encoder, VAE and workflow; which one
+   * a model file belongs to is read from its name (`imageFamily`).
+   */
+  export type ImageFamily = "qwen" | "moss" | "iris"
+
+  /**
+   * What runs an image job: ComfyUI, or stable-diffusion.cpp for the files only it can read.
+   */
+  export type ImageEngine = "comfy" | "sdcpp"
+
+  /**
    * Samplers offered for image jobs, by the names ComfyUI gives them.
    */
   export type ImageSampler = "euler_ancestral" | "euler" | "dpmpp_2m" | "er_sde"
@@ -40,6 +51,11 @@ declare namespace Media {
   export type ImageParams = {
     kind: "image"
     model: string
+    /**
+     * The text encoder that reads the prompt (one of `Engine.Models.image.textEncoders`). Jobs from before
+     * there was a choice have none, and run on the first one installed.
+     */
+    textEncoder?: string
     negative: string
     /**
      * `null` follows the first reference image, so `width` / `height` are `null` too.
@@ -56,6 +72,11 @@ declare namespace Media {
      * have no value at all, which means the same.
      */
     sampler?: ImageSampler | null
+    /**
+     * A LoRA applied to the model (one of its family's `loras`), and how strongly. `null`, or no value on
+     * jobs from before the option existed, runs the model as it is.
+     */
+    lora?: { name: string; strength: number } | null
     seed: number
     shouldRemoveBackground: boolean
   }
@@ -168,7 +189,10 @@ declare namespace Engine {
    * captioning engines beside this project. `null` means that kind can't run yet.
    */
   export type Models = {
-    image: { models: string[]; textEncoder: string; vae: string } | null
+    /**
+     * The families that have everything they need, each with at least one model. `null` when none has.
+     */
+    image: Partial<Record<Media.ImageFamily, ImageModels>> | null
     video: {
       models: VideoModel[]
       textEncoder: string
@@ -179,6 +203,20 @@ declare namespace Engine {
     cutout: { model: string } | null
     voice: { models: string[] } | null
     caption: { models: string[] } | null
+  }
+
+  /**
+   * What one image model family has installed.
+   *
+   * - `textEncoders` has at least one name, and the first is the one a job gets when it names none
+   * - `vae` is `null` for a family that needs none (Iris draws pixels directly)
+   * - `loras` are the LoRAs made for this family; it is empty when there are none
+   */
+  export type ImageModels = {
+    models: string[]
+    textEncoders: string[]
+    vae: string | null
+    loras: string[]
   }
 
   /**

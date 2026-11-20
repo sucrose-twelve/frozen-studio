@@ -5,6 +5,12 @@ import { z } from "zod"
 
 import { db, schema } from "@/drizzle"
 import {
+  canEditImages,
+  imageFamily,
+  listImageModels,
+  textEncodersFor
+} from "@/libs/image-model"
+import {
   randomSeed,
   toCaptionParams,
   toImageParams,
@@ -88,11 +94,31 @@ export async function createJob(input: unknown) {
 
   switch (data.kind) {
     case "image": {
-      const installed = engine?.models.image?.models
-      if (installed && !installed.includes(data.model)) {
+      // With the worker offline the lists are unknown, and the job waits in the queue either way
+      if (engine && !listImageModels(engine.models.image).includes(data.model)) {
         return {
           ok: false as const,
           message: "That image model isn't installed any more."
+        }
+      }
+      const family = engine?.models.image?.[imageFamily(data.model)]
+      if (family && !textEncodersFor(family, data.model).includes(data.textEncoder)) {
+        return {
+          ok: false as const,
+          message: "That text encoder isn't installed, or doesn't go with this model."
+        }
+      }
+      if (family && data.lora && !family.loras.includes(data.lora)) {
+        return {
+          ok: false as const,
+          message: "That LoRA isn't installed, or was made for another model."
+        }
+      }
+      if (data.references.length > 0 && !canEditImages(data.model)) {
+        return {
+          ok: false as const,
+          message:
+            "This model only draws new images. Remove the reference images, or pick another model to edit them."
         }
       }
 

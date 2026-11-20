@@ -32,6 +32,9 @@ __pycache__/
 /caption/.venv/
 /caption/models/
 
+# stable-diffusion.cpp: the downloaded program and any models kept beside it
+/sdcpp/
+
 # the launcher's logs and the icon it draws for the Desktop shortcut
 /logs/
 /launcher/frozen.ico

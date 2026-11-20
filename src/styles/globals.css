@@ -6,7 +6,7 @@
 
 @layer base {
   * {
-    @apply scrollbar-thumb-separator scrollbar-track-surface scroll-auto;
+    @apply scrollbar-thumb-separator scrollbar-track-surface scrollbar-thin;
   }
 
   html,

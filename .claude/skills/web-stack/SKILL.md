@@ -53,6 +53,7 @@ in `node_modules/@heroui/styles/dist/components/`.
 | Database     | Drizzle ORM 1.0 (rc) + `postgres` (js)                                 | Relational Queries v2 (`defineRelations`), `drizzle-kit`    |
 | Queue        | Redis (`redis` v6)                                                     | List + pub/sub — see [engine](references/engine.md)         |
 | Engine       | ComfyUI, driven by `src/worker/`                                       | The app never calls it — see [engine](references/engine.md) |
+| Engine (2nd) | stable-diffusion.cpp in `sdcpp/` (`sd-cli`, one run per job)           | Image jobs with a GGUF text encoder                         |
 | Voice        | Japanese Parler-TTS in `tts/` (Python 3.12, PyTorch)                   | Started by the worker — see [engine](references/engine.md)  |
 | Caption      | Ministral 3 8B in `caption/` (Python 3.12, PyTorch, transformers 5)    | Started by the worker — see [engine](references/engine.md)  |
 | Validation   | Zod v4                                                                 | env, Server Action input, forms                             |

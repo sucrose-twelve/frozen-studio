@@ -120,12 +120,103 @@ export const IMAGE_DEFAULT_SAMPLERS = {
   edit: "euler"
 } as const satisfies Record<string, Media.ImageSampler>
 
+/**
+ * How a Turbo build of Qwen-Image 2.1 is sampled. It was distilled to finish in exactly these 8 steps
+ * without guidance, so none of it is adjustable:
+ *
+ * - `sigmas` are the noise levels of the model card (`sample_sigmas`), one more than there are steps. No
+ *   scheduler ComfyUI has produces them, so the workflow passes them by hand.
+ * - At CFG 1 the negative prompt is never read.
+ */
+export const IMAGE_TURBO = {
+  steps: 8,
+  cfg: 1,
+  sampler: "euler",
+  sigmas: [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0.0]
+} as const satisfies {
+  steps: number
+  cfg: number
+  sampler: Media.ImageSampler
+  sigmas: readonly number[]
+}
+
+/**
+ * In the order the Image form lists their models.
+ */
+export const IMAGE_FAMILIES = [
+  "qwen",
+  "moss",
+  "iris"
+] as const satisfies readonly Media.ImageFamily[]
+
+export const IMAGE_FAMILY_LABELS: Record<Media.ImageFamily, string> = {
+  qwen: "Qwen-Image 2.1",
+  moss: "MOSS-Image",
+  iris: "Iris"
+}
+
 export const IMAGE_DEFAULTS = {
   steps: 35,
   cfg: 5,
   count: 1,
   tier: "standard"
 } as const satisfies Partial<Media.ImageParams>
+
+type ImageSampling = {
+  steps: number
+  cfg: number
+  qualities: readonly { id: string; label: string; steps: number }[]
+  samplers: { create: Media.ImageSampler; edit: Media.ImageSampler }
+  canEdit: boolean
+}
+
+/**
+ * How each family is sampled when the form is left alone, and what it can do.
+ *
+ * - Qwen-Image 2.1: the values above, from its model card and from testing.
+ * - MOSS-Image: 25 steps at CFG 2.5 with `er_sde`, the settings of ComfyUI's own workflow for it; 50 steps
+ *   is what the original pipeline runs. It edits only with a separate edit LoRA and its own text encoding,
+ *   which this project doesn't set up, so it draws new images only.
+ * - Iris: 30 steps at CFG 3 with `dpmpp_2m`, what the card of its GGUF release measured with (20 steps
+ *   came out close to 30, 8 only as a rough preview). It is not distilled, and it has no editing.
+ */
+export const IMAGE_FAMILY_SAMPLING: Record<Media.ImageFamily, ImageSampling> = {
+  qwen: {
+    steps: IMAGE_DEFAULTS.steps,
+    cfg: IMAGE_DEFAULTS.cfg,
+    qualities: IMAGE_QUALITIES,
+    samplers: IMAGE_DEFAULT_SAMPLERS,
+    canEdit: true
+  },
+  moss: {
+    steps: 25,
+    cfg: 2.5,
+    qualities: [
+      { id: "draft", label: "Draft", steps: 16 },
+      { id: "standard", label: "Standard", steps: 25 },
+      { id: "fine", label: "Fine", steps: 50 }
+    ],
+    samplers: { create: "er_sde", edit: "er_sde" },
+    canEdit: false
+  },
+  iris: {
+    steps: 30,
+    cfg: 3,
+    qualities: [
+      { id: "draft", label: "Draft", steps: 20 },
+      { id: "standard", label: "Standard", steps: 30 },
+      { id: "fine", label: "Fine", steps: 50 }
+    ],
+    samplers: { create: "dpmpp_2m", edit: "dpmpp_2m" },
+    canEdit: false
+  }
+}
+
+/**
+ * How strongly a LoRA is applied: the range the form offers, and where it starts. Most LoRA cards suggest
+ * 0.7 to 0.9; above 1 the LoRA's look takes over the image.
+ */
+export const LORA_STRENGTH = { min: 0, max: 2, step: 0.05, initial: 0.8 } as const
 
 export const MAX_REFERENCES = { image: 4, video: 6, cutout: 12, caption: 8 } as const
 

@@ -6,6 +6,7 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job_inputs
    │ SSE        │  └────── Redis       frozen:queue · frozen:engine · frozen:events · frozen:control
    └────────────┘             ▲
                               │            ┌──► ComfyUI ──────────► images, videos
+                              │            ├──► sdcpp/ (sd-cli) ──► images: GGUF text encoders, Iris
                            Worker ─────────┼──► tts/server.py ────► voice clips
                                            └──► caption/server.py ► descriptions and prompts
 ```
@@ -18,10 +19,13 @@ Two processes share this repo:
   client of the engines. It runs one job at a time: one GPU, and the models don't fit side
   by side.
 
-And three engines do the generating:
+And four engines do the generating:
 
 - **ComfyUI**, for image, video and cutout jobs. It is a separate program, started by hand
   or by `launcher/Frozen.ps1`; the worker waits for it and never starts or stops it.
+- **stable-diffusion.cpp** (`sdcpp/bin/sd-cli.exe`), for the image jobs ComfyUI can't run:
+  those with a text encoder that comes as a GGUF, which includes every Iris job. The
+  worker runs it once per job. See [stable-diffusion.cpp](#stable-diffusioncpp).
 - The **voice service** (`tts/server.py`), for voice jobs. It belongs to this project: the
   worker starts it when the first voice job arrives and stops it when it exits. See
   [the voice engine](#the-voice-engine).
@@ -148,18 +152,36 @@ return builder.build()
 - Shared pieces live in `shared.ts`: `outputPrefix`, `loadReference` (flattens
   transparency onto white, which the models need), `removeBackground`.
 
-| File        | Builds                                                                                                                        |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `image.ts`  | Qwen-Image 2.1: text to image, or an edit when references are given. Optional cutout copy                                     |
-| `video.ts`  | Wan 2.2 I2V: one or more passes (`planSegments`), joined; the first frame is drawn with `addQwenImage` when no image is given |
-| `cutout.ts` | BiRefNet background removal for one image                                                                                     |
+| File        | Builds                                                                                                                                                                                       |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `image.ts`  | `addImage`, on the model's family: Qwen-Image 2.1 (text to image, an edit with references, a Turbo build on its fixed schedule) or MOSS-Image (text to image). Optional LoRA and cutout copy |
+| `video.ts`  | Wan 2.2 I2V: one or more passes (`planSegments`), joined; the first frame is drawn with `addImage` when no image is given                                                                    |
+| `cutout.ts` | BiRefNet background removal for one image                                                                                                                                                    |
 
 Rules that keep them honest:
 
 - **The model is the job's choice.** Each form starts with a `ModelSelect` over what
   `Engine.Models` lists for its kind, and the pick is stored in the job's params
   (`params.model`). For video one choice is a pair of Wan files (`Engine.VideoModel`),
-  matched up by name in `pairVideoModels`.
+  matched up by name in `pairVideoModels`. The Image form has a second one for the text
+  encoder (`params.textEncoder`), since more than one build of it can be installed.
+- **The Image form runs more than one family** (`Media.ImageFamily`: Qwen-Image 2.1,
+  MOSS-Image, Iris). A file's family is read from its name (`imageFamily` in
+  `@/libs/image-model`), `Engine.Models.image` lists each family's models, text encoders,
+  VAE and LoRAs, and `IMAGE_FAMILY_SAMPLING` holds how each is sampled and whether it can
+  edit. Picking a model of another family resets the form's sampling to that family's. A
+  new family needs: its patterns in `discoverModels`, an entry in those constants, and an
+  `add…Image` builder that `addImage` dispatches to. One that runs on stable-diffusion.cpp
+  instead is found in `withSdCppModels` and given its arguments in `runSdCppJob`.
+- **A model that runs one way only says so in code, not in the form's values.** A Turbo
+  image model (`isTurboImageModel`, by file name) always gets `IMAGE_TURBO`: the builder
+  ignores the job's steps, CFG and sampler, `toImageParams` stores what really ran, and
+  the form shows those settings disabled. It can't edit (`canEditImages`), and neither can
+  MOSS-Image, so the form and `createJob` both refuse references with them.
+- **GGUF files go through ComfyUI-GGUF's loaders** (`isGgufFile`), and only for diffusion
+  models. One written by stable-diffusion.cpp has no `general.architecture` and fails to
+  load until a copy with that field is made; a Qwen3-VL text encoder as GGUF loads but is
+  mistaken for another model's encoder, so `discoverModels` doesn't list those.
 - **Model file names are never hard-coded.** `discoverModels()` (`comfy/discover.ts`) asks
   ComfyUI which files it has and matches them by pattern; the worker adds the voice and
   caption engines (`findVoiceModels`, `findCaptionModels`), and the result
@@ -173,6 +195,42 @@ Rules that keep them honest:
   UI never promises what the workflow doesn't do.
 - Check a node's inputs against the running ComfyUI before using it:
   `curl -s http://127.0.0.1:8188/object_info/<NodeClass>`.
+
+## stable-diffusion.cpp
+
+A second image engine, for what ComfyUI can't do: read a Qwen3-VL text encoder from a GGUF
+file, and run Iris models. `runSdCppJob` (`worker/sdcpp.ts`) runs `sd-cli` once for the
+job.
+
+- **Which engine runs a job follows from its text encoder** (`imageEngine` in
+  `@/libs/image-model`): a GGUF one means stable-diffusion.cpp. There is no engine
+  setting; the form marks those encoders "sd.cpp" and says what picking one does.
+- **What it adds to `Engine.Models`** (`withSdCppModels`): those encoders, appended to the
+  Qwen family's list, and the whole Iris family, which has no VAE (`vae: null`) and whose
+  encoders are all GGUFs. `textEncodersFor` offers a Qwen model a GGUF encoder only when
+  it is a Turbo model in a GGUF file, the one combination that is set up and was tried.
+- **Two ways to sample.** A Turbo model gets `IMAGE_TURBO` whatever the job says. Iris
+  gets the job's steps, CFG, sampler (`SAMPLER_NAMES` maps the form's names to the
+  program's) and negative prompt.
+- **Files are found by name** in the folders of `SDCPP_MODEL_DIRS`, searched with their
+  subfolders (`modelFiles`). With ComfyUI's models folder in that list, both engines use
+  one copy of the model and the VAE.
+- **One process per job.** It loads the models, draws every image of the job and exits, so
+  it holds no VRAM between jobs and `claimGpu(null)` clears the card for it first.
+  Canceling kills the process.
+- **Progress is read from its log**: stage lines become labels (`stageLabel`), and the
+  sampler's progress bars the count. Its bars drawn with `#` are file reads and ignored.
+- **No VAE tiling.** With `--vae-tiling` the decode took 16 seconds instead of 2 on a 16
+  GB card, and the largest size the form offers decodes without it.
+- **No cut-out copy**: that is made by ComfyUI inside the same workflow. `toImageParams`
+  drops the option for these jobs and the form says so.
+- **Not waited for like ComfyUI.** `runsOnComfy` is false for these jobs. Iris is listed
+  and runs with ComfyUI down; the Qwen models are only known while it is up.
+
+```sh
+sdcpp/bin/sd-cli.exe --list-devices     # which GPU it will use
+sdcpp/bin/sd-cli.exe --help
+```
 
 ## The Python services
 
@@ -351,6 +409,7 @@ with (`COMFY_INPUT_DIR`, `COMFY_OUTPUT_DIR`), inside a `frozen/` subfolder
   other. A long or multi-keyframe video pays that swap per pass.
 - **The engines take turns** (`claimGpu` in `worker/service.ts`). Before a voice or
   caption job the worker asks ComfyUI to drop its models (`freeComfyMemory`) and the other
-  service to unload; before a ComfyUI job both services unload. The voice model takes
-  about 4 GB and loads in a few seconds; the caption model takes about 10 GB and half a
-  minute; ComfyUI's take longer to come back. Jobs of one kind in a row pay nothing.
+  service to unload; before a ComfyUI job both services unload; before a
+  stable-diffusion.cpp job all three do. The voice model takes about 4 GB and loads in a
+  few seconds; the caption model takes about 10 GB and half a minute; ComfyUI's take
+  longer to come back. Jobs of one kind in a row pay nothing.

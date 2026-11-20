@@ -17,19 +17,25 @@ export type ModelOption = {
  * It is there with a single model too, to say which one is in use, and without any it stays on screen,
  * disabled; the form's submit bar says what is missing.
  *
+ * A model that works in several files gets one of these per file the user can swap, each under its own
+ * `title` (the Image form's text encoder).
+ *
  * @param label - Names the control for screen readers, e.g. "Image model"
  * @param models - What is installed, as the engine reports it
+ * @param title - The section's heading, "Model" unless given
  */
 export function ModelSelect({
   label,
   models,
   value,
-  onChange
+  onChange,
+  title = "Model"
 }: Readonly<{
   label: string
   models: readonly ModelOption[]
   value: string
   onChange: (id: string) => void
+  title?: string
 }>) {
   const handleChange = useCallback(
     (key: unknown) => {
@@ -40,7 +46,7 @@ export function ModelSelect({
 
   return (
     <FormSection
-      title='Model'
+      title={title}
       note={models.length > 1 ? `${models.length} installed` : null}>
       <Select
         aria-label={label}

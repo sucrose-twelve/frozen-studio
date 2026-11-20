@@ -7,6 +7,7 @@ import {
   dbSchema,
   envSchema,
   redisSchema,
+  sdCppSchema,
   ttsSchema
 } from "./validator.zod"
 
@@ -18,6 +19,7 @@ export type RedisSchema = z.infer<typeof redisSchema>
 export type ComfySchema = z.infer<typeof comfySchema>
 export type TtsSchema = z.infer<typeof ttsSchema>
 export type CaptionSchema = z.infer<typeof captionSchema>
+export type SdCppSchema = z.infer<typeof sdCppSchema>
 
 export const ENV = envSchema.parse({
   APP_MODE: process.env.NODE_ENV ?? process.env.NEXT_PUBLIC_APP_MODE,
@@ -57,6 +59,11 @@ export const CAPTION = captionSchema.parse({
   port: process.env.CAPTION_PORT,
   python: process.env.CAPTION_PYTHON,
   modelDir: process.env.CAPTION_MODEL_DIR
+})
+
+export const SDCPP = sdCppSchema.parse({
+  cli: process.env.SDCPP_CLI,
+  modelDirs: process.env.SDCPP_MODEL_DIRS
 })
 
 export const DATABASE_URL = `postgresql://${DB.user}:${DB.password}@${DB.host}:${DB.port}/${DB.name}`
