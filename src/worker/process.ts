@@ -19,6 +19,7 @@ import { buildVideoGraph } from "@/libs/comfy/graphs/video"
 import { imageEngine } from "@/libs/image-model"
 import { assetFilePath, comfyImageName, mimeTypeOf, readPngFileSize } from "@/libs/media"
 import { publishEvent } from "@/libs/queue"
+import { videoFamily } from "@/libs/video-model"
 import { aspectRatioOf, videoSize } from "@/libs/video-plan"
 
 import { runCaptionJob } from "./caption"
@@ -163,7 +164,11 @@ export async function processJob(job: Job, control: RunControl) {
         ? first.width / first.height
         : aspectRatioOf(job.params.aspect)
 
-      frameSize = videoSize(job.params.resolution, aspectRatio)
+      frameSize = videoSize(
+        job.params.resolution,
+        aspectRatio,
+        videoFamily(job.params.model)
+      )
       built = buildVideoGraph({
         jobId: job.id,
         prompt: job.prompt,

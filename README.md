@@ -7,7 +7,7 @@ the right, every result kept in a gallery.
 | Mode    | What it does                                                                                                                                                                                                                              | Model                            |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
 | Image   | Text to image, or an edit / mix of up to 4 reference images (Qwen-Image only). Can also save a transparent cutout of the result                                                                                                           | Qwen-Image 2.1, MOSS-Image, Iris |
-| Video   | Text to video, image to video, or a video through up to 6 keyframes (optionally looping). Frames can be saved, cut out, and built into a sprite sheet, exported as a zip (PNG sheet, a README with frame count and speed, a WebM preview) | Wan 2.2 I2V                      |
+| Video   | Text to video, image to video, or a video through up to 6 keyframes (optionally looping). Frames can be saved, cut out, and built into a sprite sheet, exported as a zip (PNG sheet, a README with frame count and speed, a WebM preview) | Wan 2.2 I2V, LTX 2.5             |
 | Cutout  | Background removal for up to 12 images at once                                                                                                                                                                                            | BiRefNet                         |
 | Voice   | Japanese text to speech: a script becomes one WAV clip per line, in a voice shaped by a description                                                                                                                                       | Japanese Parler-TTS              |
 | Caption | Image and text to text: a detailed description of each image with a positive and a negative prompt that ask for it again, or an answer to whatever the prompt asks about it. The text can be sent on to the Image or Video form           | Ministral 3 8B                   |
@@ -52,6 +52,7 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
   | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
   | Image  | a Qwen-Image 2.1 diffusion model (safetensors or GGUF, a Turbo build included), a `qwen3vl` 8B text encoder as safetensors, `qwen_image_2.1_vae`. And / or a MOSS-Image diffusion model, the `qwen3.5_9b` text encoder, `flux2-vae` (optional: LoRAs with `moss` in their name) |
   | Video  | Wan 2.2 I2V high- and low-noise GGUFs (needs the ComfyUI-GGUF node), the `umt5` text encoder, the Wan 2.1 VAE                                                                                                                                                                   |
+  | Video  | And / or LTX 2.5: a diffusion model with `ltx25` in its name (GGUF or safetensors), its `gemma4` text encoder with `ltx` in the name, its video VAE. Text to video and one image to video, at 24 fps                                                                            |
   | Fast   | the `wan2.2_i2v_lightx2v` high- and low-noise LoRAs (optional: 4-step videos)                                                                                                                                                                                                   |
   | Cutout | any model in `models/background_removal`                                                                                                                                                                                                                                        |
 
@@ -235,10 +236,10 @@ Conventions for the code live in `.claude/skills/web-stack/`.
   kind of image. Captions are text, so they are kept on the Caption page, in its recent
   strip, and not in the gallery.
 - **Models.** The Image, Video, Voice and Caption forms each start with a Model list of
-  what is installed for them: the Qwen-Image files and the Wan 2.2 high/low pairs ComfyUI
-  has, and the model folders under `tts/models` and `caption/models`. Nothing needs
-  editing in `.env` to switch. The Image form also lists the text encoders that fit its
-  model.
+  what is installed for them: the Qwen-Image files, the Wan 2.2 high/low pairs and the LTX
+  2.5 files ComfyUI has, and the model folders under `tts/models` and `caption/models`.
+  Nothing needs editing in `.env` to switch. The Image form also lists the text encoders
+  that fit its model.
 - **MOSS-Image** is the family the Image form starts on when it is installed, and what
   draws the first frame of a text-to-video; Qwen-Image 2.1 comes after it. It has its own
   text encoder and VAE, and picking a model of another family switches the form to that

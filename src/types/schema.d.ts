@@ -54,6 +54,12 @@ declare namespace Media {
 
   export type VideoResolution = 480 | 720
 
+  /**
+   * The model families the Video form can run: Wan 2.2 (a pair of files per model) and LTX 2.5 (one file).
+   * Which one a model belongs to is read from its name (`videoFamily`).
+   */
+  export type VideoFamily = "wan" | "ltx"
+
   export type ImageParams = {
     kind: "image"
     model: string
@@ -90,8 +96,9 @@ declare namespace Media {
   export type VideoParams = {
     kind: "video"
     /**
-     * Which pair of Wan files runs the job (`Engine.VideoModel.name`). Jobs from before there was a choice
-     * have none, and run on the first pair installed.
+     * Which model runs the job: the name of a pair of Wan files (`Engine.VideoModel.name`) or an LTX file.
+     * Its family (`videoFamily`) decides the frame rate. Jobs from before there was a choice have none, and
+     * run on the first Wan pair installed.
      */
     model?: string
     seconds: number
@@ -101,7 +108,8 @@ declare namespace Media {
      */
     aspect: Aspect
     /**
-     * The image model that draws the first frame of a text-to-video job, `null` with references.
+     * The image model that draws the first frame of a text-to-video job on Wan. `null` with references,
+     * and on LTX, which makes a video from text alone.
      */
     imageModel: string | null
     isStaticCamera: boolean
@@ -111,7 +119,7 @@ declare namespace Media {
     cfg: number
     /**
      * What to keep out of the video, on top of the list Wan always gets (`WAN_NEGATIVE_PROMPT`). Without
-     * effect in fast mode, which runs at CFG 1. Jobs from before the option existed have no value.
+     * effect in fast mode and on LTX, which run at CFG 1. Jobs from before the option existed have no value.
      */
     negative?: string
     seed: number
@@ -199,13 +207,10 @@ declare namespace Engine {
      * The families that have everything they need, each with at least one model. `null` when none has.
      */
     image: Partial<Record<Media.ImageFamily, ImageModels>> | null
-    video: {
-      models: VideoModel[]
-      textEncoder: string
-      vae: string
-      fastHighNoise: string | null
-      fastLowNoise: string | null
-    } | null
+    /**
+     * The video families, each `null` until it has everything it needs. `null` when neither has.
+     */
+    video: { wan: WanModels | null; ltx: LtxModels | null } | null
     cutout: { model: string } | null
     voice: { models: string[] } | null
     caption: { models: string[] } | null
@@ -234,6 +239,28 @@ declare namespace Engine {
     name: string
     highNoise: string
     lowNoise: string
+  }
+
+  /**
+   * What Wan 2.2 has installed: at least one pair, the umT5 text encoder and the VAE. The Lightning LoRAs
+   * are optional and switch on the fast mode.
+   */
+  export type WanModels = {
+    models: VideoModel[]
+    textEncoder: string
+    vae: string
+    fastHighNoise: string | null
+    fastLowNoise: string | null
+  }
+
+  /**
+   * What LTX 2.5 has installed: at least one model file (each is one choice in the Video form, under its
+   * file name), the Gemma text encoder made for it, and its video VAE.
+   */
+  export type LtxModels = {
+    models: string[]
+    textEncoder: string
+    vae: string
   }
 
   /**

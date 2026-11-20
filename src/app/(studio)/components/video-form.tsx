@@ -11,19 +11,18 @@ import type { AssetView } from "@/actions/jobs/read"
 import { videoValidator, type VideoValidator } from "@/actions/jobs/validator.zod"
 import {
   ASPECTS,
-  MAX_REFERENCES,
-  VIDEO_FPS,
+  VIDEO_FAMILY_SETTINGS,
   VIDEO_RESOLUTIONS,
   VIDEO_SAMPLING,
-  VIDEO_SECONDS,
-  VIDEO_STEPS
+  VIDEO_SECONDS
 } from "@/constants"
 import { useEngine, useStore } from "@/hooks"
+import { listVideoModels, videoFamily } from "@/libs/video-model"
 import { aspectRatioOf, countFrames, planSegments, videoSize } from "@/libs/video-plan"
 
 import { useDefaultModel } from "../hooks/use-default-model"
 import { useStudioQuery } from "../hooks/use-studio-query"
-import { parseSeed, VIDEO_FORM_DEFAULTS } from "../utils"
+import { modelLabel, parseSeed, VIDEO_FORM_DEFAULTS } from "../utils"
 import {
   FieldMessage,
   FieldRow,
@@ -53,14 +52,21 @@ const ASPECT_OPTIONS: Option<Media.Aspect>[] = ASPECTS.map((aspect) => ({
 /**
  * What the reference slots mean at each count, shown under them.
  */
-function describeSource(count: number) {
-  if (count === 0) return "Text to video: the first frame is drawn from the prompt."
+function describeSource(count: number, family: Media.VideoFamily) {
+  if (count === 0) {
+    return family === "ltx"
+      ? "Text to video: made from the prompt alone."
+      : "Text to video: the first frame is drawn from the prompt."
+  }
   if (count === 1) return "Image to video: the image is the first frame."
-  return `Keyframes: the video moves through the ${count} images in order.`
+  return family === "ltx"
+    ? "This model animates one image."
+    : `Keyframes: the video moves through the ${count} images in order.`
 }
 
 /**
- * The Video form, on Wan 2.2: from text alone, from one image, or through several keyframes.
+ * The Video form: from text alone, from one image, or on Wan 2.2 through several keyframes. The model's
+ * family (`videoFamily`) decides the frame rate, the steps on offer and which options apply.
  */
 export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
   const engine = useEngine()
@@ -103,44 +109,68 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
   const model = useWatch({ control: form.control, name: "model" })
 
   const models = engine?.models
-  const videoModels = models?.video?.models
-  const modelNames = useMemo(() => videoModels?.map((pair) => pair.name), [videoModels])
+  const installed = models?.video
+  const modelNames = useMemo(
+    () => (installed ? listVideoModels(installed) : undefined),
+    [installed]
+  )
   const modelOptions = useMemo(
-    () => (modelNames ?? []).map((name) => ({ id: name, label: name })),
+    () => (modelNames ?? []).map((name) => ({ id: name, label: modelLabel(name) })),
     [modelNames]
   )
-  const hasFastModels = !!models?.video?.fastHighNoise && !!models.video.fastLowNoise
+  const family = videoFamily(model)
+  const settings = VIDEO_FAMILY_SETTINGS[family]
+  // LTX is distilled: it has no slow schedule to switch to, no keyframes, and runs at CFG 1
+  const isLtx = family === "ltx"
+  const hasFastModels = !!installed?.wan?.fastHighNoise && !!installed.wan.fastLowNoise
   // Fast mode as the job will actually run it: asked for, and the LoRAs are there
-  const isFastRun = isFast && hasFastModels
+  const isFastRun = !isLtx && isFast && hasFastModels
   const hasCutoutModel = !!models?.cutout
   const isTextToVideo = references.length === 0
-  const canLoop = references.length > 1
+  const canLoop = !isLtx && references.length > 1
 
   const summary = useMemo(() => {
-    const segments = planSegments(seconds, references.length, isLoop && canLoop)
+    const segments = planSegments(
+      seconds,
+      references.length,
+      isLoop && canLoop,
+      family,
+      resolution
+    )
     const frames = countFrames(segments)
     const first = references[0]
     const size = videoSize(
       resolution,
-      first ? first.width / first.height : aspectRatioOf(aspect)
+      first ? first.width / first.height : aspectRatioOf(aspect),
+      family
     )
     const passes = segments.length === 1 ? "1 pass" : `${segments.length} passes`
+    const { fps } = VIDEO_FAMILY_SETTINGS[family]
 
-    return `${size.width} × ${size.height} · ${(frames / VIDEO_FPS).toFixed(1)}s · ${frames} frames · ${passes}`
-  }, [seconds, references, isLoop, canLoop, resolution, aspect])
+    return `${size.width} × ${size.height} · ${(frames / fps).toFixed(1)}s · ${frames} frames · ${fps} fps · ${passes}`
+  }, [seconds, references, isLoop, canLoop, resolution, aspect, family])
 
   const blocker = !engine
     ? "The worker is offline, so the installed models are unknown."
     : !engine.isComfyOnline
       ? "ComfyUI is offline. Start it to load the video models."
       : !models?.video
-        ? "The Wan 2.2 video models aren't installed in ComfyUI."
-        : isTextToVideo && !models.image
-          ? "Text to video needs the image model for its first frame. Add an image instead."
-          : null
+        ? "No video model is installed in ComfyUI."
+        : references.length > settings.maxReferences
+          ? "This model animates one image. Remove the others, or pick a Wan model."
+          : isTextToVideo && !isLtx && !models.image
+            ? "Text to video needs the image model for its first frame. Add an image instead."
+            : null
 
+  // Each family has its own range of steps, so moving to another one starts from that family's
   const handleModelChange = useCallback(
-    (value: string) => form.setValue("model", value),
+    (value: string) => {
+      const next = videoFamily(value)
+      if (next !== videoFamily(form.getValues("model"))) {
+        form.setValue("steps", VIDEO_FAMILY_SETTINGS[next].steps.initial)
+      }
+      form.setValue("model", value)
+    },
     [form]
   )
   const handleReferencesChange = useCallback(
@@ -193,9 +223,9 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
         "steps",
         typeof value === "number" && Number.isFinite(value)
           ? Math.round(value)
-          : VIDEO_FORM_DEFAULTS.steps
+          : settings.steps.initial
       ),
-    [form]
+    [form, settings]
   )
   const handleSeedChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) =>
@@ -300,16 +330,20 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
 
       <FormSection
         title='Images'
-        note={`${references.length} / ${MAX_REFERENCES.video} · optional`}>
+        note={`${references.length} / ${settings.maxReferences} · optional`}>
         <ReferencePicker
           value={references}
           onChange={handleReferencesChange}
-          max={MAX_REFERENCES.video}
+          max={settings.maxReferences}
           isOrdered
           isActive={isActive}
-          hint='One image to animate, or several as keyframes'
+          hint={
+            isLtx
+              ? "One image to animate"
+              : "One image to animate, or several as keyframes"
+          }
         />
-        <p className='text-muted text-xs'>{describeSource(references.length)}</p>
+        <p className='text-muted text-xs'>{describeSource(references.length, family)}</p>
       </FormSection>
 
       <FormSection title='Output'>
@@ -344,12 +378,14 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
         <SwitchField
           label='Fast mode'
           description={
-            hasFastModels
-              ? "4 steps with the Lightning LoRAs. Turn off for the full 20-step schedule."
-              : "Needs the Wan 2.2 Lightning LoRAs in ComfyUI."
+            isLtx
+              ? "Built into this model: it always runs a few steps."
+              : hasFastModels
+                ? "4 steps with the Lightning LoRAs. Turn off for the full 20-step schedule."
+                : "Needs the Wan 2.2 Lightning LoRAs in ComfyUI."
           }
-          isSelected={isFast && hasFastModels}
-          isDisabled={!hasFastModels}
+          isSelected={isLtx || (isFast && hasFastModels)}
+          isDisabled={isLtx || !hasFastModels}
           onChange={handleFastChange}
         />
         <SwitchField
@@ -363,7 +399,9 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
           description={
             canLoop
               ? "Adds a last stretch from the final keyframe to the first, for a seamless loop."
-              : "Needs two or more keyframes."
+              : isLtx
+                ? "Needs a Wan model: this one takes a single image."
+                : "Needs two or more keyframes."
           }
           isSelected={isLoop && canLoop}
           isDisabled={!canLoop}
@@ -397,22 +435,24 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
             fullWidth
             rows={2}
             variant='secondary'
-            disabled={isFastRun}
+            disabled={isFastRun || isLtx}
             placeholder='What to keep out of the video. Leave empty unless something keeps showing up.'
             {...form.register("negative")}
           />
           <p className='text-muted text-xs'>
-            {isFastRun
-              ? "Fast mode ignores a negative prompt. Turn it off to use one."
-              : "Added to the list Wan always gets (blur, extra fingers, frozen frames)."}
+            {isLtx
+              ? "This model runs at CFG 1, which ignores a negative prompt."
+              : isFastRun
+                ? "Fast mode ignores a negative prompt. Turn it off to use one."
+                : "Added to the list Wan always gets (blur, extra fingers, frozen frames)."}
           </p>
         </FieldRow>
         <div className='grid grid-cols-2 gap-3'>
           <NumberField
             fullWidth
             variant='secondary'
-            minValue={VIDEO_STEPS.min}
-            maxValue={VIDEO_STEPS.max}
+            minValue={settings.steps.min}
+            maxValue={settings.steps.max}
             step={1}
             isDisabled={isFastRun}
             value={isFastRun ? VIDEO_SAMPLING.fast.steps : steps}
@@ -437,9 +477,11 @@ export function VideoForm({ isActive }: Readonly<{ isActive: boolean }>) {
           </FieldRow>
         </div>
         <p className='text-muted text-xs'>
-          {isFastRun
-            ? `Fast mode always runs ${VIDEO_SAMPLING.fast.steps} steps. Turn it off to set them.`
-            : `${VIDEO_SAMPLING.full.steps} is Wan's own setting. The time a video takes grows with the steps.`}
+          {isLtx
+            ? `${settings.steps.initial} is what the model's card recommends; ${settings.steps.min} is enough for a rough look.`
+            : isFastRun
+              ? `Fast mode always runs ${VIDEO_SAMPLING.fast.steps} steps. Turn it off to set them.`
+              : `${VIDEO_SAMPLING.full.steps} is Wan's own setting. The time a video takes grows with the steps.`}
         </p>
       </FormSection>
 

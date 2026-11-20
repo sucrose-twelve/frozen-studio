@@ -8,7 +8,7 @@ export type SpriteSheetInfo = {
   name: string
   frames: number
   /**
-   * Playback speed in frames per second. A fraction when every third frame of a 16 fps video is kept.
+   * Playback speed in frames per second. A fraction when, say, every third frame of a 16 fps video is kept.
    */
   fps: number
   columns: number

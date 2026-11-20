@@ -6,9 +6,10 @@ import Image from "next/image"
 import { useMemo, useState } from "react"
 
 import type { AssetView, JobDetail } from "@/actions/jobs/read"
-import { IMAGE_SAMPLER_LABELS } from "@/constants"
+import { IMAGE_SAMPLER_LABELS, VIDEO_FAMILY_SETTINGS } from "@/constants"
 import { imageEngine } from "@/libs/image-model"
 import { cls, formatElapsed } from "@/libs/utils"
+import { videoFamily } from "@/libs/video-model"
 
 import { OptionGroup, type Option } from "./option-group"
 import { ResultActions } from "./result-actions"
@@ -95,6 +96,11 @@ export function JobResult({
   const facts = useMemo(() => (asset ? describe(job, asset) : []), [job, asset])
   const hasAlpha = asset?.role === "cutout"
   const framesHaveAlpha = job.params.kind === "video" && job.params.shouldRemoveBackground
+  // The frames play at the rate of the model that made the video
+  const sourceFps =
+    VIDEO_FAMILY_SETTINGS[
+      videoFamily(job.params.kind === "video" ? job.params.model : null)
+    ].fps
 
   if (!asset) {
     return (
@@ -210,6 +216,7 @@ export function JobResult({
                     <SpriteSheet
                       name={`sprite-${job.id.slice(0, 8)}`}
                       frames={job.frames}
+                      fps={sourceFps}
                       hasAlpha={framesHaveAlpha}
                     />
                   </Modal.Body>

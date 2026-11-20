@@ -1,9 +1,9 @@
-import { VIDEO_AREAS, VIDEO_FPS, VIDEO_SEGMENT_SECONDS } from "@/constants"
+import { VIDEO_AREAS, VIDEO_FAMILY_SETTINGS } from "@/constants"
 
 import { roundToStep } from "./utils"
 
 /**
- * One Wan pass of a video.
+ * One pass of a video.
  *
  * - `from`: the keyframe it starts on, or `null` to continue from the previous pass's last frame
  * - `end`: the keyframe it must land on, or `null` to end wherever the motion takes it
@@ -15,14 +15,16 @@ export type VideoSegment = {
 }
 
 /**
- * Wan generates `4k + 1` frames, and fewer than 5 is no motion at all.
+ * A pass makes `k × frameStep + 1` frames (Wan `4k + 1`, LTX `8k + 1`), and a single step is the least that
+ * is motion at all.
  */
-function framesFor(seconds: number) {
-  return Math.max(5, Math.floor((seconds * VIDEO_FPS) / 4) * 4 + 1)
+function framesFor(seconds: number, family: Media.VideoFamily) {
+  const { fps, frameStep } = VIDEO_FAMILY_SETTINGS[family]
+  return Math.max(frameStep + 1, Math.floor((seconds * fps) / frameStep) * frameStep + 1)
 }
 
 /**
- * Splits a video into Wan passes of at most `VIDEO_SEGMENT_SECONDS`.
+ * Splits a video into passes of at most the family's `passSeconds` at that resolution.
  *
  * - One keyframe: a chain of image-to-video passes, each starting on the last frame of the one before.
  * - Several: the length is shared equally between the gaps (`isLoop` adds one from the last keyframe back to
@@ -34,12 +36,19 @@ function framesFor(seconds: number) {
  * @param seconds - Length of the whole video
  * @param keyframes - Number of keyframe images; 0 and 1 both mean a single starting frame
  */
-export function planSegments(seconds: number, keyframes: number, isLoop: boolean) {
+export function planSegments(
+  seconds: number,
+  keyframes: number,
+  isLoop: boolean,
+  family: Media.VideoFamily,
+  resolution: Media.VideoResolution
+) {
+  const passSeconds = VIDEO_FAMILY_SETTINGS[family].passSeconds[resolution]
   const segments: VideoSegment[] = []
 
   if (keyframes <= 1) {
-    const passes = Math.ceil(seconds / VIDEO_SEGMENT_SECONDS)
-    const frames = framesFor(seconds / passes)
+    const passes = Math.ceil(seconds / passSeconds)
+    const frames = framesFor(seconds / passes, family)
     for (let pass = 0; pass < passes; pass++) {
       segments.push({ frames, from: pass === 0 ? 0 : null, end: null })
     }
@@ -49,8 +58,8 @@ export function planSegments(seconds: number, keyframes: number, isLoop: boolean
 
   const gaps = keyframes - 1 + (isLoop ? 1 : 0)
   const gapSeconds = seconds / gaps
-  const passes = Math.ceil(gapSeconds / VIDEO_SEGMENT_SECONDS)
-  const frames = framesFor(gapSeconds / passes)
+  const passes = Math.ceil(gapSeconds / passSeconds)
+  const frames = framesFor(gapSeconds / passes, family)
 
   for (let gap = 0; gap < gaps; gap++) {
     for (let pass = 0; pass < passes; pass++) {
@@ -77,16 +86,22 @@ export function countFrames(segments: VideoSegment[]) {
 }
 
 /**
- * The frame size for a resolution's pixel budget at a given shape, on Wan's 16 px grid.
+ * The frame size for a resolution's pixel budget at a given shape, on the family's grid (Wan 16 px, LTX
+ * 32 px).
  *
  * @param aspectRatio - Width divided by height
  */
-export function videoSize(resolution: Media.VideoResolution, aspectRatio: number) {
+export function videoSize(
+  resolution: Media.VideoResolution,
+  aspectRatio: number,
+  family: Media.VideoFamily
+) {
   const area = VIDEO_AREAS[resolution]
+  const { sizeStep } = VIDEO_FAMILY_SETTINGS[family]
 
   return {
-    width: roundToStep(Math.sqrt(area * aspectRatio), 16),
-    height: roundToStep(Math.sqrt(area / aspectRatio), 16)
+    width: roundToStep(Math.sqrt(area * aspectRatio), sizeStep),
+    height: roundToStep(Math.sqrt(area / aspectRatio), sizeStep)
   }
 }
 

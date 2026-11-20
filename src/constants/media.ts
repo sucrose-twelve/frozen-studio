@@ -236,26 +236,80 @@ export const VIDEO_AREAS: Record<Media.VideoResolution, number> = {
   720: 1280 * 720
 }
 
-export const VIDEO_FPS = 16
+/**
+ * The order the Video form lists the families in. The first one installed is what the form starts on.
+ */
+export const VIDEO_FAMILIES = [
+  "wan",
+  "ltx"
+] as const satisfies readonly Media.VideoFamily[]
 
 /**
- * Wan 2.2 holds together for about 5 seconds (81 frames) per pass; longer videos are chained from passes of
- * at most this length.
+ * What the form and the workflow need to know about a video family.
+ *
+ * - `fps`: the frame rate the model was trained at, which the video and its sprite sheets play at
+ * - `frameStep`: a pass makes `k × frameStep + 1` frames, the model's own grid in time
+ * - `sizeStep`: the grid the width and height are rounded to
+ * - `passSeconds`: the longest stretch one pass makes at each resolution; longer videos are chained from
+ *   passes
+ * - `steps`: the range the form offers and where it starts
+ * - `maxReferences`: how many images a job takes. More than one are keyframes
  */
-export const VIDEO_SEGMENT_SECONDS = 5
+type VideoFamilySettings = {
+  fps: number
+  frameStep: number
+  sizeStep: number
+  passSeconds: Record<Media.VideoResolution, number>
+  steps: { min: number; max: number; initial: number }
+  cfg: number
+  maxReferences: number
+}
+
+/**
+ * - Wan 2.2: 16 fps, and a pass holds together for about 5 seconds (81 frames). 20 steps at CFG 3.5 is its
+ *   stock schedule; `VIDEO_SAMPLING.fast` replaces it in fast mode.
+ * - LTX 2.5: 24 fps. The build this was set up with has its distillation LoRA merged in, so it always runs
+ *   few steps at CFG 1: 8 is what its card recommends, 4 still works for text to video, and 16 is its
+ *   stated ceiling. It takes one image, the first frame. On a 16 GB card one pass holds 10 seconds at 480p
+ *   or 5 at 720p (about 100 seconds of work either way); 10 seconds at 720p in one pass was still sampling
+ *   after 9 minutes.
+ */
+export const VIDEO_FAMILY_SETTINGS: Record<Media.VideoFamily, VideoFamilySettings> = {
+  wan: {
+    fps: 16,
+    frameStep: 4,
+    sizeStep: 16,
+    passSeconds: { 480: 5, 720: 5 },
+    steps: { min: 4, max: 50, initial: 20 },
+    cfg: 3.5,
+    maxReferences: MAX_REFERENCES.video
+  },
+  ltx: {
+    fps: 24,
+    frameStep: 8,
+    sizeStep: 32,
+    passSeconds: { 480: 10, 720: 5 },
+    steps: { min: 4, max: 16, initial: 8 },
+    cfg: 1,
+    maxReferences: 1
+  }
+}
 
 /**
  * Sampling settings for Wan 2.2: the 4-step Lightning LoRAs when `isFast`, the stock schedule otherwise.
  */
 export const VIDEO_SAMPLING = {
   fast: { steps: 4, cfg: 1 },
-  full: { steps: 20, cfg: 3.5 }
+  full: {
+    steps: VIDEO_FAMILY_SETTINGS.wan.steps.initial,
+    cfg: VIDEO_FAMILY_SETTINGS.wan.cfg
+  }
 } as const
 
 /**
- * The steps that can be asked for on the full schedule. The high-noise model takes the first half and the
- * low-noise model the rest, so there have to be a few for each. Fast mode is not adjustable: its LoRAs were
- * made for exactly 4 steps.
+ * The steps any video job can ask for; each family narrows it (`VIDEO_FAMILY_SETTINGS`). On Wan the
+ * high-noise model takes the first half and the low-noise model the rest, so there have to be a few for
+ * each. Fast mode is not adjustable: its LoRAs were made for exactly 4 steps.
  */
 export const VIDEO_STEPS = { min: 4, max: 50 } as const
 

@@ -155,7 +155,7 @@ return builder.build()
 | File        | Builds                                                                                                                                                                                       |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `image.ts`  | `addImage`, on the model's family: Qwen-Image 2.1 (text to image, an edit with references, a Turbo build on its fixed schedule) or MOSS-Image (text to image). Optional LoRA and cutout copy |
-| `video.ts`  | Wan 2.2 I2V: one or more passes (`planSegments`), joined; the first frame is drawn with `addImage` when no image is given                                                                    |
+| `video.ts`  | On the model's family. Wan 2.2 I2V: one or more passes (`planSegments`), joined; the first frame is drawn with `addImage` when no image is given. LTX 2.5: text or one image to video        |
 | `cutout.ts` | BiRefNet background removal for one image                                                                                                                                                    |
 
 Rules that keep them honest:
@@ -163,8 +163,9 @@ Rules that keep them honest:
 - **The model is the job's choice.** Each form starts with a `ModelSelect` over what
   `Engine.Models` lists for its kind, and the pick is stored in the job's params
   (`params.model`). For video one choice is a pair of Wan files (`Engine.VideoModel`),
-  matched up by name in `pairVideoModels`. The Image form has a second one for the text
-  encoder (`params.textEncoder`), since more than one build of it can be installed.
+  matched up by name in `pairVideoModels`, or one LTX file. The Image form has a second
+  one for the text encoder (`params.textEncoder`), since more than one build of it can be
+  installed.
 - **The Image form runs more than one family** (`Media.ImageFamily`: Qwen-Image 2.1,
   MOSS-Image, Iris). A file's family is read from its name (`imageFamily` in
   `@/libs/image-model`), `Engine.Models.image` lists each family's models, text encoders,
@@ -175,6 +176,18 @@ Rules that keep them honest:
   new family needs: its patterns in `discoverModels`, an entry in those constants, and an
   `add…Image` builder that `addImage` dispatches to. One that runs on stable-diffusion.cpp
   instead is found in `withSdCppModels` and given its arguments in `runSdCppJob`.
+- **The Video form runs two families** (`Media.VideoFamily`: Wan 2.2, LTX 2.5), read from
+  the model's name (`videoFamily` in `@/libs/video-model`). `VIDEO_FAMILY_SETTINGS` holds
+  what differs: the frame rate (16 and 24 fps), the frame and size grids, how long one
+  pass is, the range of steps, and how many images a job takes. Nothing stores the frame
+  rate: the sprite sheet builder and the form's summary read it from the family of the
+  job's model. LTX has no fast mode, loop or keyframes, and runs at CFG 1, so the form
+  shows those options disabled and `toVideoParams` stores what really ran.
+- **LTX runs on ComfyUI's own nodes**, with the GGUF read by ComfyUI-GGUF's
+  `UnetLoaderGGUF`. Its release's workflows use a loader pack of their own
+  (`LTXV25ModelsLoader`, `LTXV25AVDecode`); that is not needed. The model also makes
+  sound, and that half is left out: the video latent is sampled alone, so no audio VAE is
+  loaded and the MP4 is silent.
 - **A model that runs one way only says so in code, not in the form's values.** A Turbo
   image model (`isTurboImageModel`, by file name) always gets `IMAGE_TURBO`: the builder
   ignores the job's steps, CFG and sampler, `toImageParams` stores what really ran, and
@@ -412,6 +425,9 @@ with (`COMFY_INPUT_DIR`, `COMFY_OUTPUT_DIR`), inside a `frozen/` subfolder
   open, the video models spill into shared memory and a job that takes a minute takes ten.
 - The two Wan models don't fit together in 16 GB, so every video pass loads one, then the
   other. A long or multi-keyframe video pays that swap per pass.
+- LTX 2.5 as a Q4 GGUF (14 GB) almost fills the card by itself. What one pass can hold was
+  measured, and is in `VIDEO_FAMILY_SETTINGS` (`passSeconds`) and beside the decode in
+  `video.ts`: past it the work spills into shared memory and takes many times longer.
 - **The engines take turns** (`claimGpu` in `worker/service.ts`). Before a voice or
   caption job the worker asks ComfyUI to drop its models (`freeComfyMemory`) and the other
   service to unload; before a ComfyUI job both services unload; before a

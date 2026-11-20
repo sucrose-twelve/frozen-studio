@@ -45,6 +45,18 @@ function pairVideoModels(names: string[]): Engine.VideoModel[] {
 }
 
 /**
+ * An LTX 2.5 diffusion model, as a GGUF or as safetensors.
+ */
+const LTX_MODEL = /ltx.?2\.?5/i
+
+/**
+ * The text encoder LTX 2.5 reads prompts with: Gemma 4 12B in the build that carries LTX's projection
+ * layers, which is what makes ComfyUI load it as LTX's encoder. A plain Gemma 4 file has none and says no
+ * "ltx" in its name.
+ */
+const LTX_TEXT_ENCODER = /gemma.?4.*ltx|ltx.*gemma.?4/i
+
+/**
  * A Qwen-Image 2.1 diffusion model, under its own name or as one of the Sakura quantizations of it.
  */
 const IMAGE_MODEL = /(?:qwen|sakura).?image.?2\.1/i
@@ -96,6 +108,8 @@ function preferring(names: string[], pattern: RegExp) {
  *   VAE. LoRAs with "moss" in their name are offered with them
  * - Video: Wan 2.2 image-to-video GGUFs in pairs (high and low noise), the umT5 text encoder and the Wan
  *   VAE; the Lightning LoRAs are optional and switch on the fast mode
+ * - Video, second family: LTX 2.5 diffusion models (GGUF or safetensors), its Gemma 4 text encoder and its
+ *   video VAE. Its audio VAE is not asked for: the workflow makes no sound
  * - Cutout: any model in `models/background_removal`
  */
 export async function discoverModels(): Promise<ComfyModels> {
@@ -140,19 +154,29 @@ export async function discoverModels(): Promise<ComfyModels> {
   const videoModels = pairVideoModels(gguf)
   const videoTextEncoder = pick(textEncoders, /umt5/i)
   const videoVae = pick(vaes, /wan2?\.?1.*vae/i, /wan.*vae/i)
+  const wan =
+    videoModels.length > 0 && videoTextEncoder && videoVae
+      ? {
+          models: videoModels,
+          textEncoder: videoTextEncoder,
+          vae: videoVae,
+          fastHighNoise: pick(loras, /wan2\.2_i2v.*lightx2v.*high/i),
+          fastLowNoise: pick(loras, /wan2\.2_i2v.*lightx2v.*low/i)
+        }
+      : null
+
+  const ltxModels = [...gguf, ...diffusion].filter((name) => LTX_MODEL.test(name))
+  const ltxTextEncoder = pick(textEncoders, LTX_TEXT_ENCODER)
+  // The release names both of its VAEs "ltx…vae"; the audio one is the wrong kind of model here
+  const ltxVae = pick(vaes, /ltx.*video.?vae/i, /ltx(?!.*audio).*vae/i)
+  const ltx =
+    ltxModels.length > 0 && ltxTextEncoder && ltxVae
+      ? { models: ltxModels, textEncoder: ltxTextEncoder, vae: ltxVae }
+      : null
 
   return {
     image: image.qwen || image.moss ? image : null,
-    video:
-      videoModels.length > 0 && videoTextEncoder && videoVae
-        ? {
-            models: videoModels,
-            textEncoder: videoTextEncoder,
-            vae: videoVae,
-            fastHighNoise: pick(loras, /wan2\.2_i2v.*lightx2v.*high/i),
-            fastLowNoise: pick(loras, /wan2\.2_i2v.*lightx2v.*low/i)
-          }
-        : null,
+    video: wan || ltx ? { wan, ltx } : null,
     cutout: backgroundRemoval[0] ? { model: backgroundRemoval[0] } : null
   }
 }

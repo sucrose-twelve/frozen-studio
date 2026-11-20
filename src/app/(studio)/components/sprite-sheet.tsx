@@ -5,7 +5,6 @@ import { Download } from "@keyline-icons/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import type { AssetView } from "@/actions/jobs/read"
-import { VIDEO_FPS } from "@/constants"
 import { describeSpriteSheet, recordPreview, saveBlob } from "@/libs/sprite-sheet"
 import { cls } from "@/libs/utils"
 import { createZip } from "@/libs/zip"
@@ -93,15 +92,18 @@ function drawSheet(
  *
  * @param name - The base name of the exported files
  * @param frames - The frames in order
+ * @param fps - The frame rate of the video they come from, which depends on the model that made it
  * @param hasAlpha - Whether the frames are cut out, which puts a checkerboard behind the previews
  */
 export function SpriteSheet({
   name,
   frames,
+  fps,
   hasAlpha
 }: Readonly<{
   name: string
   frames: AssetView[]
+  fps: number
   hasAlpha: boolean
 }>) {
   const sheetRef = useRef<HTMLCanvasElement>(null)
@@ -124,7 +126,7 @@ export function SpriteSheet({
       ),
     [images, start, every]
   )
-  const framesPerSecond = VIDEO_FPS / every
+  const framesPerSecond = fps / every
 
   const handleEveryChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) =>
@@ -166,7 +168,7 @@ export function SpriteSheet({
         frameWidth: sheet.cellWidth,
         frameHeight: sheet.cellHeight,
         hasAlpha,
-        source: { fps: VIDEO_FPS, every, start },
+        source: { fps, every, start },
         preview: previewName
       })
 
@@ -189,7 +191,7 @@ export function SpriteSheet({
     } finally {
       setIsPacking(false)
     }
-  }, [selected, columns, scale, framesPerSecond, name, hasAlpha, every, start])
+  }, [selected, columns, scale, framesPerSecond, name, hasAlpha, fps, every, start])
 
   useEffect(() => {
     let isCurrent = true
