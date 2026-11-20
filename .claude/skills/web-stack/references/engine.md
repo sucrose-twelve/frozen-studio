@@ -152,11 +152,11 @@ return builder.build()
 - Shared pieces live in `shared.ts`: `outputPrefix`, `loadReference` (flattens
   transparency onto white, which the models need), `removeBackground`.
 
-| File        | Builds                                                                                                                                                                                       |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `image.ts`  | `addImage`, on the model's family: Qwen-Image 2.1 (text to image, an edit with references, a Turbo build on its fixed schedule) or MOSS-Image (text to image). Optional LoRA and cutout copy |
-| `video.ts`  | On the model's family. Wan 2.2 I2V: one or more passes (`planSegments`), joined; the first frame is drawn with `addImage` when no image is given. LTX 2.5: text or one image to video        |
-| `cutout.ts` | BiRefNet background removal for one image                                                                                                                                                    |
+| File        | Builds                                                                                                                                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `image.ts`  | `addImage`, on the model's family: Qwen-Image 2.1 (text to image, an edit with references, a Turbo build on its fixed schedule) or MOSS-Image (text to image, an edit with its edit LoRA). Optional LoRA and cutout copy |
+| `video.ts`  | On the model's family. Wan 2.2 I2V: one or more passes (`planSegments`), joined; the first frame is drawn with `addImage` when no image is given. LTX 2.5: text or one image to video                                    |
+| `cutout.ts` | BiRefNet background removal for one image                                                                                                                                                                                |
 
 Rules that keep them honest:
 
@@ -191,8 +191,14 @@ Rules that keep them honest:
 - **A model that runs one way only says so in code, not in the form's values.** A Turbo
   image model (`isTurboImageModel`, by file name) always gets `IMAGE_TURBO`: the builder
   ignores the job's steps, CFG and sampler, `toImageParams` stores what really ran, and
-  the form shows those settings disabled. It can't edit (`canEditImages`), and neither can
-  MOSS-Image, so the form and `createJob` both refuse references with them.
+  the form shows those settings disabled. It can't edit (`canEditImages`), so the form and
+  `createJob` both refuse references with it.
+- **Editing is the family's to describe** (`editing` in `IMAGE_FAMILY_SAMPLING`): built in
+  (Qwen-Image), through an edit LoRA (MOSS-Image, `Engine.ImageModels.editLora`), or not
+  at all. The edit LoRA is found by `discoverModels` and added by the builder itself; it
+  is not one of the LoRAs the form offers. A family whose edits are sampled differently
+  says so too (`edit`), and the form swaps those settings in and out with the first and
+  the last reference (`imageSamplingDefaults`).
 - **GGUF files go through ComfyUI-GGUF's loaders** (`isGgufFile`), and only for diffusion
   models. One written by stable-diffusion.cpp has no `general.architecture` and fails to
   load until a copy with that field is made; a Qwen3-VL text encoder as GGUF loads but is

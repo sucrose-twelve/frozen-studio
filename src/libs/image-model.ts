@@ -26,15 +26,33 @@ export function isTurboImageModel(fileName: string) {
 }
 
 /**
- * Whether a model can take reference images, i.e. edit.
+ * Whether a model can take reference images, i.e. edit. The form and `createJob` both ask this.
  *
- * A Turbo model can't, though its family can: given a reference it returns it burnt and over-sharpened
- * (tried with one reference on its own schedule). The form and `createJob` both ask this.
+ * - A Turbo model can't, though its family can: given a reference it returns it burnt and over-sharpened
+ *   (tried with one reference on its own schedule).
+ * - MOSS-Image can once its edit LoRA is installed.
+ *
+ * @param installed - What the model's family has installed, which is where an edit LoRA shows up
  */
-export function canEditImages(fileName: string) {
-  return (
-    IMAGE_FAMILY_SAMPLING[imageFamily(fileName)].canEdit && !isTurboImageModel(fileName)
-  )
+export function canEditImages(
+  fileName: string,
+  installed: Engine.ImageModels | undefined
+) {
+  if (isTurboImageModel(fileName)) return false
+
+  const { editing } = IMAGE_FAMILY_SAMPLING[imageFamily(fileName)]
+  return editing === "built-in" || (editing === "lora" && !!installed?.editLora)
+}
+
+/**
+ * The steps and guidance a form starts from for a family: those of a new image, or of an edit where the
+ * family has its own for that.
+ */
+export function imageSamplingDefaults(family: Media.ImageFamily, isEdit: boolean) {
+  const sampling = IMAGE_FAMILY_SAMPLING[family]
+  const { steps, cfg } = (isEdit ? sampling.edit : undefined) ?? sampling
+
+  return { steps, cfg }
 }
 
 /**

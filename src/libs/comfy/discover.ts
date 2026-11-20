@@ -105,7 +105,8 @@ function preferring(names: string[], pattern: RegExp) {
  *   Text encoders are safetensors only. ComfyUI knows this encoder by its vision half, which a GGUF of it
  *   leaves out, so one loaded from a GGUF is taken for another model's encoder and the job fails
  * - Image, second family: MOSS-Image diffusion models, with the Qwen3.5 9B text encoder and the FLUX.2
- *   VAE. LoRAs with "moss" in their name are offered with them
+ *   VAE. LoRAs with "moss" in their name are offered with them, except its edit LoRA, which is what
+ *   lets the family take reference images
  * - Video: Wan 2.2 image-to-video GGUFs in pairs (high and low noise), the umT5 text encoder and the Wan
  *   VAE; the Lightning LoRAs are optional and switch on the fast mode
  * - Video, second family: LTX 2.5 diffusion models (GGUF or safetensors), its Gemma 4 text encoder and its
@@ -139,15 +140,19 @@ export async function discoverModels(): Promise<ComfyModels> {
       models: imageModels,
       textEncoders: imageTextEncoders,
       vae: imageVae,
-      loras: []
+      loras: [],
+      editLora: null
     }
   }
   if (mossModels.length > 0 && mossTextEncoders.length > 0 && mossVae) {
+    // The edit LoRA is not a look to pick: the workflow adds it by itself when there are references
+    const mossEditLora = pick(loras, /moss.?image.?edit/i)
     image.moss = {
       models: mossModels,
       textEncoders: mossTextEncoders,
       vae: mossVae,
-      loras: loras.filter((name) => /moss/i.test(name))
+      loras: loras.filter((name) => /moss/i.test(name) && name !== mossEditLora),
+      editLora: mossEditLora
     }
   }
 

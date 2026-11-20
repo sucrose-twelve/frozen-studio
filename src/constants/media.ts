@@ -169,7 +169,14 @@ type ImageSampling = {
   cfg: number
   qualities: readonly { id: string; label: string; steps: number }[]
   samplers: { create: Media.ImageSampler; edit: Media.ImageSampler }
-  canEdit: boolean
+  /**
+   * How the family takes reference images: by itself, with its edit LoRA installed, or not at all.
+   */
+  editing: "built-in" | "lora" | "none"
+  /**
+   * The steps and guidance an edit starts from, when they differ from a new image's.
+   */
+  edit?: { steps: number; cfg: number }
 }
 
 /**
@@ -177,8 +184,9 @@ type ImageSampling = {
  *
  * - Qwen-Image 2.1: the values above, from its model card and from testing.
  * - MOSS-Image: 25 steps at CFG 2.5 with `er_sde`, the settings of ComfyUI's own workflow for it; 50 steps
- *   is what the original pipeline runs. It edits only with a separate edit LoRA and its own text encoding,
- *   which this project doesn't set up, so it draws new images only.
+ *   is what the original pipeline runs. It edits with a separate edit LoRA, whose author's settings are
+ *   30 steps at CFG 4 with `euler`. That guidance is part of how the LoRA works: lower, and things that
+ *   were not asked for start to appear in the picture.
  * - Iris: 30 steps at CFG 3 with `dpmpp_2m`, what the card of its GGUF release measured with (20 steps
  *   came out close to 30, 8 only as a rough preview). It is not distilled, and it has no editing.
  */
@@ -188,7 +196,7 @@ export const IMAGE_FAMILY_SAMPLING: Record<Media.ImageFamily, ImageSampling> = {
     cfg: IMAGE_DEFAULTS.cfg,
     qualities: IMAGE_QUALITIES,
     samplers: IMAGE_DEFAULT_SAMPLERS,
-    canEdit: true
+    editing: "built-in"
   },
   moss: {
     steps: 25,
@@ -198,8 +206,9 @@ export const IMAGE_FAMILY_SAMPLING: Record<Media.ImageFamily, ImageSampling> = {
       { id: "standard", label: "Standard", steps: 25 },
       { id: "fine", label: "Fine", steps: 50 }
     ],
-    samplers: { create: "er_sde", edit: "er_sde" },
-    canEdit: false
+    samplers: { create: "er_sde", edit: "euler" },
+    editing: "lora",
+    edit: { steps: 30, cfg: 4 }
   },
   iris: {
     steps: 30,
@@ -210,9 +219,17 @@ export const IMAGE_FAMILY_SAMPLING: Record<Media.ImageFamily, ImageSampling> = {
       { id: "fine", label: "Fine", steps: 50 }
     ],
     samplers: { create: "dpmpp_2m", edit: "dpmpp_2m" },
-    canEdit: false
+    editing: "none"
   }
 }
+
+/**
+ * What a MOSS-Image edit is told to keep out when the negative prompt is left empty. At the guidance an
+ * edit runs with, the negative side is always read, so it must say something. This is the line the edit
+ * LoRA's author ships, without its first word ("nsfw"): what subject matter to keep out is the user's to
+ * write.
+ */
+export const MOSS_EDIT_NEGATIVE = "worst quality, bad anatomy, watermark, jpeg artifact"
 
 /**
  * How strongly a LoRA is applied: the range the form offers, and where it starts. Most LoRA cards suggest

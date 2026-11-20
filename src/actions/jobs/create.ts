@@ -114,11 +114,12 @@ export async function createJob(input: unknown) {
           message: "That LoRA isn't installed, or was made for another model."
         }
       }
-      if (data.references.length > 0 && !canEditImages(data.model)) {
+      // What can edit depends on what is installed, which is only known while the worker reports
+      if (family && data.references.length > 0 && !canEditImages(data.model, family)) {
         return {
           ok: false as const,
           message:
-            "This model only draws new images. Remove the reference images, or pick another model to edit them."
+            "This model can't take reference images as it is installed. Remove them, or pick another model."
         }
       }
 

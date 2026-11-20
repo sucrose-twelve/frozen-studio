@@ -6,7 +6,7 @@ the right, every result kept in a gallery.
 
 | Mode    | What it does                                                                                                                                                                                                                              | Model                            |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| Image   | Text to image, or an edit / mix of up to 4 reference images (Qwen-Image only). Can also save a transparent cutout of the result                                                                                                           | Qwen-Image 2.1, MOSS-Image, Iris |
+| Image   | Text to image, or an edit / mix of up to 4 reference images (Qwen-Image, and MOSS-Image with its edit LoRA). Can also save a transparent cutout of the result                                                                             | Qwen-Image 2.1, MOSS-Image, Iris |
 | Video   | Text to video, image to video, or a video through up to 6 keyframes (optionally looping). Frames can be saved, cut out, and built into a sprite sheet, exported as a zip (PNG sheet, a README with frame count and speed, a WebM preview) | Wan 2.2 I2V, LTX 2.5             |
 | Cutout  | Background removal for up to 12 images at once                                                                                                                                                                                            | BiRefNet                         |
 | Voice   | Japanese text to speech: a script becomes one WAV clip per line, in a voice shaped by a description                                                                                                                                       | Japanese Parler-TTS              |
@@ -48,13 +48,13 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
 - Postgres and Redis (e.g. Docker in WSL), with an empty database for the app
 - ComfyUI 0.44+ running on this machine, with:
 
-  | For    | Files (matched by name)                                                                                                                                                                                                                                                         |
-  | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | Image  | a Qwen-Image 2.1 diffusion model (safetensors or GGUF, a Turbo build included), a `qwen3vl` 8B text encoder as safetensors, `qwen_image_2.1_vae`. And / or a MOSS-Image diffusion model, the `qwen3.5_9b` text encoder, `flux2-vae` (optional: LoRAs with `moss` in their name) |
-  | Video  | Wan 2.2 I2V high- and low-noise GGUFs (needs the ComfyUI-GGUF node), the `umt5` text encoder, the Wan 2.1 VAE                                                                                                                                                                   |
-  | Video  | And / or LTX 2.5: a diffusion model with `ltx25` in its name (GGUF or safetensors), its `gemma4` text encoder with `ltx` in the name, its video VAE. Text to video and one image to video, at 24 fps                                                                            |
-  | Fast   | the `wan2.2_i2v_lightx2v` high- and low-noise LoRAs (optional: 4-step videos)                                                                                                                                                                                                   |
-  | Cutout | any model in `models/background_removal`                                                                                                                                                                                                                                        |
+  | For    | Files (matched by name)                                                                                                                                                                                                                                                                                                                   |
+  | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | Image  | a Qwen-Image 2.1 diffusion model (safetensors or GGUF, a Turbo build included), a `qwen3vl` 8B text encoder as safetensors, `qwen_image_2.1_vae`. And / or a MOSS-Image diffusion model, the `qwen3.5_9b` text encoder, `flux2-vae` (optional: `moss_image_edit_lora` to use reference images, and other LoRAs with `moss` in their name) |
+  | Video  | Wan 2.2 I2V high- and low-noise GGUFs (needs the ComfyUI-GGUF node), the `umt5` text encoder, the Wan 2.1 VAE                                                                                                                                                                                                                             |
+  | Video  | And / or LTX 2.5: a diffusion model with `ltx25` in its name (GGUF or safetensors), its `gemma4` text encoder with `ltx` in the name, its video VAE. Text to video and one image to video, at 24 fps                                                                                                                                      |
+  | Fast   | the `wan2.2_i2v_lightx2v` high- and low-noise LoRAs (optional: 4-step videos)                                                                                                                                                                                                                                                             |
+  | Cutout | any model in `models/background_removal`                                                                                                                                                                                                                                                                                                  |
 
 - For Voice (optional): [uv](https://docs.astral.sh/uv/) to set up its Python environment,
   and about 10 GB of disk
@@ -243,10 +243,12 @@ Conventions for the code live in `.claude/skills/web-stack/`.
 - **MOSS-Image** is the family the Image form starts on when it is installed, and what
   draws the first frame of a text-to-video; Qwen-Image 2.1 comes after it. It has its own
   text encoder and VAE, and picking a model of another family switches the form to that
-  family's settings (MOSS-Image: 25 steps, CFG 2.5). It only draws new images here: its
-  editing needs a separate LoRA that isn't set up. A LoRA made for it can be picked under
-  Advanced, with a strength; most LoRAs only show their effect with their trigger word at
-  the start of the prompt.
+  family's settings (MOSS-Image: 25 steps, CFG 2.5). It takes reference images once its
+  edit LoRA is in ComfyUI's `loras` folder: the form then switches to the LoRA's own
+  settings with the first reference (30 steps, CFG 4) and back without. Describe only the
+  change and what to keep; the result follows the first reference's shape at about 1
+  megapixel. A LoRA made for it can be picked under Advanced, with a strength; most LoRAs
+  only show their effect with their trigger word at the start of the prompt.
 - **Iris** is a third family in the Image form, a smaller model that draws pixels directly
   (no VAE). It runs on stable-diffusion.cpp only, with 30 steps at CFG 3; 20 steps is
   close, and it takes a negative prompt. It only draws new images.

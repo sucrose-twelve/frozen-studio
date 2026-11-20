@@ -221,13 +221,16 @@ declare namespace Engine {
    *
    * - `textEncoders` has at least one name, and the first is the one a job gets when it names none
    * - `vae` is `null` for a family that needs none (Iris draws pixels directly)
-   * - `loras` are the LoRAs made for this family; it is empty when there are none
+   * - `loras` are the LoRAs made for this family that the user can pick; it is empty when there are none
+   * - `editLora` is the LoRA a family needs before it can take reference images (MOSS-Image). `null`
+   *   when it isn't installed, and for a family that edits without one or not at all
    */
   export type ImageModels = {
     models: string[]
     textEncoders: string[]
     vae: string | null
     loras: string[]
+    editLora: string | null
   }
 
   /**

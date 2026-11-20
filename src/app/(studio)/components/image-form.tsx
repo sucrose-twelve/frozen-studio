@@ -37,6 +37,7 @@ import {
   canEditImages,
   imageEngine,
   imageFamily,
+  imageSamplingDefaults,
   isGgufFile,
   isTurboImageModel,
   listImageModels,
@@ -147,7 +148,7 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
   const loras = familyModels?.loras
   // A GGUF text encoder moves the job to stable-diffusion.cpp
   const isSdCpp = imageEngine(textEncoder) === "sdcpp"
-  const canEdit = canEditImages(model)
+  const canEdit = canEditImages(model, installed?.[family])
   const modelOptions = useMemo(
     () => (models ?? []).map((name) => ({ id: name, label: modelLabel(name) })),
     [models]
@@ -198,11 +199,32 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
       : !engine.isComfyOnline && !isSdCpp
         ? "ComfyUI is offline, and this model runs on it."
         : hasReferences && !canEdit
-          ? "This model only draws new images. Remove the references, or pick another model to edit them."
+          ? sampling.editing === "lora"
+            ? `${IMAGE_FAMILY_LABELS[family]} needs its edit LoRA in ComfyUI to take reference images.`
+            : "This model only draws new images. Remove the references, or pick another model to edit them."
           : null
+
+  // Puts a family's own steps and guidance on screen: those of a new image, or of an edit
+  const applySampling = useCallback(
+    (nextFamily: Media.ImageFamily, isEdit: boolean) => {
+      const defaults = imageSamplingDefaults(nextFamily, isEdit)
+      form.setValue("steps", defaults.steps)
+      form.setValue("cfg", defaults.cfg)
+      form.setValue("sampler", null)
+    },
+    [form]
+  )
 
   const handleReferencesChange = useCallback(
     (assets: AssetView[]) => {
+      // A family whose edits are sampled differently changes its settings with the first reference, and
+      // back with the last one gone
+      const currentFamily = imageFamily(form.getValues("model"))
+      const wasEdit = form.getValues("references").length > 0
+      if (IMAGE_FAMILY_SAMPLING[currentFamily].edit && wasEdit !== assets.length > 0) {
+        applySampling(currentFamily, assets.length > 0)
+      }
+
       setReferences(assets)
       form.setValue(
         "references",
@@ -213,7 +235,7 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
         form.setValue("aspect", IMAGE_FORM_DEFAULTS.aspect)
       }
     },
-    [form]
+    [form, applySampling]
   )
 
   // Another family is sampled differently, so its own settings replace the ones on screen; a LoRA only
@@ -224,14 +246,12 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
       const next = imageFamily(value)
       // With no model yet, the settings on screen are the default family's (IMAGE_FORM_DEFAULTS)
       if (next !== (previous ? imageFamily(previous) : IMAGE_FAMILIES[0])) {
-        form.setValue("steps", IMAGE_FAMILY_SAMPLING[next].steps)
-        form.setValue("cfg", IMAGE_FAMILY_SAMPLING[next].cfg)
-        form.setValue("sampler", null)
+        applySampling(next, form.getValues("references").length > 0)
         form.setValue("lora", null)
       }
       form.setValue("model", value)
     },
-    [form]
+    [form, applySampling]
   )
   const handleTextEncoderChange = useCallback(
     (value: string) => form.setValue("textEncoder", value),
@@ -357,6 +377,14 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
     } else if (prefill.references.length > 0) {
       // An edit follows the size of what it edits, unless told otherwise
       form.setValue("aspect", null)
+      // And, as when a reference is added by hand, starts from its family's edit settings
+      const currentFamily = imageFamily(form.getValues("model"))
+      if (
+        IMAGE_FAMILY_SAMPLING[currentFamily].edit &&
+        form.getValues("references").length === 0
+      ) {
+        applySampling(currentFamily, true)
+      }
     }
 
     setReferences(prefill.references)
@@ -364,7 +392,7 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
       "references",
       prefill.references.map((asset) => asset.id)
     )
-  }, [prefill, form])
+  }, [prefill, form, applySampling])
 
   useEffect(() => {
     if (!isActive) return
@@ -407,9 +435,11 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
           variant='secondary'
           className='resize-y'
           placeholder={
-            hasReferences
-              ? "What to change, in plain sentences. Say what to keep, and which image is which: “Dress the woman in image 1 in the outfit from image 2. Keep her pose.”"
-              : "Describe the image in plain sentences: subject, setting, light, style."
+            !hasReferences
+              ? "Describe the image in plain sentences: subject, setting, light, style."
+              : family === "moss"
+                ? "Describe only the change, and what to keep: “Change only the jacket to a black wool coat. Keep the face, hair, pose and background unchanged.” With more images, say what each one is for."
+                : "What to change, in plain sentences. Say what to keep, and which image is which: “Dress the woman in image 1 in the outfit from image 2. Keep her pose.”"
           }
           {...form.register("prompt")}
         />

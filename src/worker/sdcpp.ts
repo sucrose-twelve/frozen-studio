@@ -143,7 +143,8 @@ export function withSdCppModels(image: Engine.Models["image"]): Engine.Models["i
       models: irisModels,
       textEncoders: irisTextEncoders,
       vae: null,
-      loras: []
+      loras: [],
+      editLora: null
     }
   }
 

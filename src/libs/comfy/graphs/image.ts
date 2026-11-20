@@ -2,7 +2,8 @@ import {
   IMAGE_DEFAULT_SAMPLERS,
   IMAGE_FAMILY_LABELS,
   IMAGE_FAMILY_SAMPLING,
-  IMAGE_TURBO
+  IMAGE_TURBO,
+  MOSS_EDIT_NEGATIVE
 } from "@/constants"
 import { imageFamily, isGgufFile, isTurboImageModel } from "@/libs/image-model"
 
@@ -48,6 +49,7 @@ export type ImageRequest = {
 type ImageOptions = Omit<ImageRequest, "textEncoder"> & {
   textEncoder: string
   vae: string
+  editLora: string | null
 }
 
 /**
@@ -186,20 +188,34 @@ function addQwenImage(builder: GraphBuilder, options: ImageOptions): NodeRef {
 }
 
 /**
- * Adds a MOSS-Image generation to a workflow: text to image only. The nodes and their settings are those of
- * ComfyUI's own workflow for the model.
+ * Adds a MOSS-Image generation to a workflow: text to image, or an edit when references are given. The
+ * nodes and their settings are those of ComfyUI's own workflows for the model.
  *
  * - It has its own text encoder (Qwen3.5 9B, loaded as `moss_image`) and works in the FLUX.2 latent space,
  *   so the empty latent comes from the FLUX.2 node and not the plain one.
- * - An empty negative prompt is fine here, unlike with Qwen-Image.
- * - Editing needs an edit LoRA and its own encoding node; neither is set up, so references are refused.
+ * - An empty negative prompt is fine for a new image, unlike with Qwen-Image.
+ *
+ * An edit is the same model with its edit LoRA on top, and differs in these ways:
+ *
+ * - The prompt and the negative prompt are each encoded together with the references
+ *   (`TextEncodeMOSSImageEdit`), in the layout this LoRA was trained with. The other layouts still return
+ *   an image, a worse one.
+ * - References go in at the size they arrive, so each is scaled to 1 megapixel on a 16px grid first.
+ *   Smaller is cheaper, and the model starts re-framing the picture instead of editing it.
+ * - Skip-layer guidance on single layer 22 and the `normal` scheduler are what the LoRA's author ships.
+ * - The negative side is always read at an edit's guidance, so an empty one falls back to
+ *   `MOSS_EDIT_NEGATIVE`.
  *
  * @returns The decoded image batch
- * @throws {Error} When the request has reference images, or no size
+ * @throws {Error} When there are references but no edit LoRA, or a new image has no size
  */
 function addMossImage(builder: GraphBuilder, options: ImageOptions): NodeRef {
-  if (options.references.length > 0 || !options.size) {
-    throw new Error("MOSS-Image only draws new images: it needs a size and no references")
+  const isEdit = options.references.length > 0
+  if (isEdit && !options.editLora) {
+    throw new Error("MOSS-Image needs its edit LoRA in ComfyUI to take reference images")
+  }
+  if (!isEdit && !options.size) {
+    throw new Error("An image without references needs a size")
   }
 
   const loaded = builder.add(
@@ -207,7 +223,22 @@ function addMossImage(builder: GraphBuilder, options: ImageOptions): NodeRef {
     { unet_name: options.model, weight_dtype: "default" },
     "Loading the image model"
   )
-  const model = applyLora(builder, loaded, options.lora)
+  let model = applyLora(builder, loaded, options.lora)
+  if (isEdit && options.editLora) {
+    const editor = builder.add("LoraLoaderModelOnly", {
+      model,
+      lora_name: options.editLora,
+      strength_model: 1
+    })
+    model = builder.add("SkipLayerGuidanceDiTSimple", {
+      model: editor,
+      double_layers: "",
+      single_layers: "22",
+      start_percent: 0,
+      end_percent: 1
+    })
+  }
+
   const textEncoder = builder.add(
     "CLIPLoader",
     { clip_name: options.textEncoder, type: "moss_image", device: "default" },
@@ -215,18 +246,63 @@ function addMossImage(builder: GraphBuilder, options: ImageOptions): NodeRef {
   )
   const vae = builder.add("VAELoader", { vae_name: options.vae })
 
-  const positive = builder.add(
-    "CLIPTextEncode",
-    { clip: textEncoder, text: options.prompt },
-    "Reading the prompt"
-  )
-  const negative = builder.add("CLIPTextEncode", {
-    clip: textEncoder,
-    text: options.negative.trim()
-  })
+  let positive: NodeRef
+  let negative: NodeRef
+  let width: number | NodeRef | undefined = options.size?.width
+  let height: number | NodeRef | undefined = options.size?.height
+
+  if (isEdit) {
+    const references = options.references.map((reference) =>
+      builder.add("ImageScaleToTotalPixels", {
+        image: loadReference(builder, reference),
+        upscale_method: "lanczos",
+        megapixels: 1,
+        resolution_steps: 16
+      })
+    )
+    const images = Object.fromEntries(
+      references.map((image, index) => [`images.image_${index}`, image])
+    )
+    const encode = (prompt: string, label?: string) =>
+      builder.add(
+        "TextEncodeMOSSImageEdit",
+        {
+          clip: textEncoder,
+          prompt,
+          vae,
+          edit_format: "Moss-Image-Edit",
+          // Only weighs the images the text encoder itself looks at, which this layout doesn't use
+          image_strength: 1,
+          ...images
+        },
+        label
+      )
+
+    positive = encode(options.prompt, "Reading the prompt and references")
+    negative = encode(options.negative.trim() || MOSS_EDIT_NEGATIVE)
+
+    // Without a size of its own, the result takes the first reference's
+    const [first] = references
+    if (!options.size && first) {
+      const measured = builder.add("GetImageSize", { image: first })
+      width = measured
+      height = output(measured, 1)
+    }
+  } else {
+    positive = builder.add(
+      "CLIPTextEncode",
+      { clip: textEncoder, text: options.prompt },
+      "Reading the prompt"
+    )
+    negative = builder.add("CLIPTextEncode", {
+      clip: textEncoder,
+      text: options.negative.trim()
+    })
+  }
+
   const latent = builder.add("EmptyFlux2LatentImage", {
-    width: options.size.width,
-    height: options.size.height,
+    width,
+    height,
     batch_size: options.count
   })
 
@@ -237,8 +313,12 @@ function addMossImage(builder: GraphBuilder, options: ImageOptions): NodeRef {
       seed: options.seed,
       steps: options.steps,
       cfg: options.cfg,
-      sampler_name: options.sampler ?? IMAGE_FAMILY_SAMPLING.moss.samplers.create,
-      scheduler: "simple",
+      sampler_name:
+        options.sampler ??
+        (isEdit
+          ? IMAGE_FAMILY_SAMPLING.moss.samplers.edit
+          : IMAGE_FAMILY_SAMPLING.moss.samplers.create),
+      scheduler: isEdit ? "normal" : "simple",
       positive,
       negative,
       latent_image: latent,
@@ -270,7 +350,12 @@ export function addImage(
     throw new Error(`${IMAGE_FAMILY_LABELS[family]} isn't installed in ComfyUI`)
   }
 
-  const options = { ...request, textEncoder, vae: installed.vae }
+  const options = {
+    ...request,
+    textEncoder,
+    vae: installed.vae,
+    editLora: installed.editLora
+  }
   return family === "moss"
     ? addMossImage(builder, options)
     : addQwenImage(builder, options)
