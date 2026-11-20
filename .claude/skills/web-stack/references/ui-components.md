@@ -69,6 +69,10 @@ two controls beside them. Use them; don't restyle per form.
 - `FormDivider` — the thick (2px) rule between zones.
 - `OptionGroup` — a typed row of buttons where exactly one is chosen. Use it for any short
   fixed set (quality, size, length); a `Select` is for a list that can grow (models).
+- `KindSwitch` — the switch between kinds of media, used by the studio (its modes) and the
+  gallery (its filter): the kinds that are made as named buttons in one group, and Cutout
+  beside them as an icon-only button, with one choice across both groups. On/off settings
+  can join the icon group as `toggles` (the gallery's Favorites).
 - `ModelSelect` — the first thing in a form whose kind has models to choose from: a
   `Select` over what the engine reports, shown with a single model too and disabled
   without any. Pair it with `useDefaultModel`, which keeps the form on an installed one.
@@ -77,10 +81,12 @@ two controls beside them. Use them; don't restyle per form.
 
 Buttons that act on one result live in `asset-buttons.tsx` (`DownloadButton`,
 `FavoriteButton`); `ResultActions` is the row under a result, and `DeleteJobButton` the
-delete with its confirmation. A caption's result is text (`caption-result.tsx`): each
-piece has a copy button, and its prompts go to the Image or Video form as a `Prefill` with
-`prompt`, which changes the form's text and nothing else. Send a `Prefill` with
-`usePrefill`, not the store's `requestPrefill`: it also goes to the page the form is on.
+delete with its confirmation. `VoiceClip` is one voice clip as a row (its line, a player,
+its buttons), shared by the studio's voice result and the gallery's voice list. A
+caption's result is text (`caption-result.tsx`): each piece has a copy button, and its
+prompts go to the Image or Video form as a `Prefill` with `prompt`, which changes the
+form's text and nothing else. Send a `Prefill` with `usePrefill`, not the store's
+`requestPrefill`: it also goes to the page the form is on.
 
 **Every setting is visible.** Don't tuck settings into a `Disclosure`, accordion or
 "Advanced" toggle: the owner asked for them to be shown outright, with the less-used ones

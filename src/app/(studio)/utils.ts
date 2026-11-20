@@ -6,12 +6,18 @@ import type {
 } from "@/actions/jobs/validator.zod"
 import {
   IMAGE_DEFAULTS,
+  IMAGE_FAMILIES,
   IMAGE_FAMILY_LABELS,
+  IMAGE_FAMILY_SAMPLING,
   LORA_STRENGTH,
   VIDEO_SAMPLING,
   VOICE_PRESETS
 } from "@/constants"
 
+/**
+ * The Image form before a model is picked. Its sampling is the default family's; picking a model of
+ * another family swaps in that family's.
+ */
 export const IMAGE_FORM_DEFAULTS: ImageValidator = {
   kind: "image",
   prompt: "",
@@ -22,8 +28,8 @@ export const IMAGE_FORM_DEFAULTS: ImageValidator = {
   aspect: "3:4",
   tier: IMAGE_DEFAULTS.tier,
   count: IMAGE_DEFAULTS.count,
-  steps: IMAGE_DEFAULTS.steps,
-  cfg: IMAGE_DEFAULTS.cfg,
+  steps: IMAGE_FAMILY_SAMPLING[IMAGE_FAMILIES[0]].steps,
+  cfg: IMAGE_FAMILY_SAMPLING[IMAGE_FAMILIES[0]].cfg,
   sampler: null,
   lora: null,
   loraStrength: LORA_STRENGTH.initial,

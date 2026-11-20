@@ -1,13 +1,15 @@
-import { AudioLines, ChevronLeft, ChevronRight } from "@keyline-icons/react"
+import { ChevronLeft, ChevronRight, SquareArrowOutUpRight } from "@keyline-icons/react"
 import { Play, Star } from "@keyline-icons/react/fill"
 import type { Metadata } from "next"
 import Image from "next/image"
 import NextLink from "next/link"
 
 import { readGallery, type GalleryItem } from "@/actions/jobs/read"
+import { GALLERY_KINDS } from "@/constants"
 import { cls } from "@/libs/utils"
 
 import { DeleteJobButton } from "../components/delete-job-button"
+import { VoiceClip } from "../components/voice-clip"
 import { GalleryFilters } from "./components/gallery-filters"
 import { queryValidator, type QueryValidator } from "./validator.nuqs"
 
@@ -16,12 +18,19 @@ export const instant = false
 export const metadata: Metadata = { title: "Gallery" }
 
 /**
+ * Where a result opens in the studio: its job on the canvas, with this result picked out.
+ */
+function studioHref(item: GalleryItem) {
+  return `/?job=${item.jobId}&mode=${item.jobKind}&asset=${item.asset.id}`
+}
+
+/**
  * A link to another page of the gallery that keeps the current filters.
  */
 function pageHref(query: QueryValidator, page: number) {
   const params = new URLSearchParams()
   if (page > 1) params.set("page", String(page))
-  if (query.kind) params.set("kind", query.kind)
+  if (query.kind !== GALLERY_KINDS[0]) params.set("kind", query.kind)
   if (query.favorites) params.set("favorites", "true")
 
   const search = params.toString()
@@ -29,7 +38,7 @@ function pageHref(query: QueryValidator, page: number) {
 }
 
 /**
- * One result: a link back into the studio, with a delete button over its corner.
+ * One picture or video: a link back into the studio, with a delete button over its corner.
  *
  * The button sits beside the link, not inside it: a button in a link is not valid, and its press would
  * follow the link. It shows on hover or keyboard focus, and always where there is no hover (touch).
@@ -41,20 +50,13 @@ function GalleryTile({ item }: Readonly<{ item: GalleryItem }>) {
   return (
     <div className='group relative'>
       <NextLink
-        href={`/?job=${item.jobId}&mode=${item.jobKind}&asset=${asset.id}`}
+        href={studioHref(item)}
         title={item.prompt || undefined}
         className={cls(
           "border-border hover:border-glacier relative block aspect-square overflow-hidden rounded-xl border transition-colors",
           asset.role === "cutout" ? "use-checkerboard" : "bg-surface-secondary"
         )}>
-        {asset.kind === "audio" ? (
-          <span className='flex size-full flex-col gap-2 p-3'>
-            <AudioLines size={22} strokeWidth={1.5} className='text-glacier shrink-0' />
-            <span lang='ja' className='line-clamp-5 text-sm leading-relaxed'>
-              {item.prompt}
-            </span>
-          </span>
-        ) : cover ? (
+        {cover ? (
           <Image
             src={cover.url}
             alt={item.prompt || "Result"}
@@ -90,7 +92,27 @@ function GalleryTile({ item }: Readonly<{ item: GalleryItem }>) {
 }
 
 /**
- * Every finished result, newest first: a grid that opens a result back in the studio.
+ * One voice clip: the same row the studio shows for it, so it can be read in full and played here, with a
+ * way back into the studio and the delete button beside its own two.
+ */
+function GalleryClip({ item }: Readonly<{ item: GalleryItem }>) {
+  return (
+    <VoiceClip clip={item.asset} text={item.prompt}>
+      <NextLink
+        href={studioHref(item)}
+        aria-label='Open in the studio'
+        title='Open in the studio'
+        className='text-muted hover:bg-surface-secondary hover:text-foreground grid size-8 place-items-center rounded-full transition-colors'>
+        <SquareArrowOutUpRight size={15} strokeWidth={1.75} />
+      </NextLink>
+      <DeleteJobButton jobId={item.jobId} resultCount={item.jobResults} />
+    </VoiceClip>
+  )
+}
+
+/**
+ * The finished results of one kind, newest first. Pictures and videos are a grid that opens a result back
+ * in the studio; voice clips are a list, since what tells them apart is a line of text and its sound.
  */
 export default async function Gallery({ searchParams }: NextSearchParams) {
   const query = queryValidator.parse(await searchParams)
@@ -102,14 +124,24 @@ export default async function Gallery({ searchParams }: NextSearchParams) {
         <div>
           <h1 className='text-2xl font-semibold tracking-tight'>Gallery</h1>
           <p className='text-muted mt-1 text-sm'>
-            {page.count === 1 ? "1 result" : `${page.count} results`}. Open one to reroll
-            it, reuse its settings, or send it on; hover one to delete its job.
+            {page.count === 1 ? "1 result" : `${page.count} results`}.{" "}
+            {query.kind === "audio"
+              ? "Play a clip here, or open it in the studio to reroll it or reuse its settings."
+              : "Open one to reroll it, reuse its settings, or send it on; hover one to delete its job."}
           </p>
         </div>
         <GalleryFilters />
       </header>
 
-      {page.data.length > 0 ? (
+      {page.data.length > 0 && query.kind === "audio" ? (
+        <ul className='mx-auto flex w-full max-w-3xl flex-col gap-3'>
+          {page.data.map((item) => (
+            <li key={item.asset.id}>
+              <GalleryClip item={item} />
+            </li>
+          ))}
+        </ul>
+      ) : page.data.length > 0 ? (
         <ul className='grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6'>
           {page.data.map((item) => (
             <li key={item.asset.id}>
@@ -119,11 +151,11 @@ export default async function Gallery({ searchParams }: NextSearchParams) {
         </ul>
       ) : (
         <div className='use-panel flex flex-col items-center gap-2 py-24 text-center'>
-          <p className='text-lg font-semibold'>Nothing matches</p>
+          <p className='text-lg font-semibold'>Nothing here</p>
           <p className='text-muted text-sm'>
-            {query.kind || query.favorites
-              ? "Try another filter."
-              : "Results show up here as soon as a job finishes."}
+            {query.favorites
+              ? "No favorites of this kind yet."
+              : "Results of this kind show up here as soon as a job finishes."}
           </p>
         </div>
       )}

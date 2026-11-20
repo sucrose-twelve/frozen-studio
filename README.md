@@ -152,9 +152,14 @@ powershell -ExecutionPolicy Bypass -File launcher/Frozen.ps1 -InstallShortcut
 ```
 
 Then double-click **Frozen**. It sits in the tray: right-click the icon to open the app or
-the logs folder, or to quit, which stops what it started. A ComfyUI that was already
-running is used as it is and left running. `launcher/Frozen.ps1 -Quit` does the same as
-the tray's "Quit Frozen", from a terminal.
+the logs folder, or to quit. `launcher/Frozen.ps1 -Quit` does the same as the tray's "Quit
+Frozen", from a terminal.
+
+Quitting leaves nothing of Frozen running and gives the VRAM back. It stops what the
+launcher started, and the voice and caption services and stable-diffusion.cpp whoever
+started them. A ComfyUI that was already running is used as it is and left running, but
+asked to drop its models. If a launcher was killed instead of quit, the next one stops
+what it left behind before starting again.
 
 The app runs as a production build. The launcher builds it when there is no build yet or
 the code has changed since the last one, which adds about half a minute to that start;
@@ -234,18 +239,22 @@ Conventions for the code live in `.claude/skills/web-stack/`.
   has, and the model folders under `tts/models` and `caption/models`. Nothing needs
   editing in `.env` to switch. The Image form also lists the text encoders that fit its
   model.
-- **MOSS-Image** is a second family in the Image form, with its own text encoder and VAE.
-  Picking it switches the form to its settings (25 steps, CFG 2.5). It only draws new
-  images here: its editing needs a separate LoRA that isn't set up. A LoRA made for it can
-  be picked under Advanced, with a strength; most LoRAs only show their effect with their
-  trigger word at the start of the prompt.
+- **MOSS-Image** is the family the Image form starts on when it is installed, and what
+  draws the first frame of a text-to-video; Qwen-Image 2.1 comes after it. It has its own
+  text encoder and VAE, and picking a model of another family switches the form to that
+  family's settings (MOSS-Image: 25 steps, CFG 2.5). It only draws new images here: its
+  editing needs a separate LoRA that isn't set up. A LoRA made for it can be picked under
+  Advanced, with a strength; most LoRAs only show their effect with their trigger word at
+  the start of the prompt.
 - **Iris** is a third family in the Image form, a smaller model that draws pixels directly
   (no VAE). It runs on stable-diffusion.cpp only, with 30 steps at CFG 3; 20 steps is
   close, and it takes a negative prompt. It only draws new images.
 - **Turbo image models** (a Qwen-Image 2.1 file with "Turbo" in its name) draw in 8 steps,
   about 15 seconds an image. Their schedule is fixed: the steps, guidance and sampler
   can't be changed, and a negative prompt is not read. They only draw new images: given a
-  reference image they return it burnt, so the form keeps edits on the other models.
+  reference image they return it burnt, so the form keeps edits on the other models. One
+  in a GGUF file is paired with the GGUF text encoders alone, when there are any, and so
+  runs on stable-diffusion.cpp.
 - **GGUF image models.** A GGUF made with stable-diffusion.cpp carries no metadata, and
   ComfyUI-GGUF then can't tell what model it is ("Unknown model architecture"). It loads
   once the file names its architecture: copy it with gguf-py, adding

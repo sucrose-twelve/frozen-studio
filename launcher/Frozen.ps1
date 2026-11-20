@@ -10,8 +10,11 @@
 # code has changed since the last one, which adds about half a minute to that start. If the build fails,
 # the dev server runs instead, so a half-finished change never keeps Frozen from opening.
 #
-# It then sits in the tray. Right-click the icon to open the app, read the logs, or quit. Quitting stops
-# what this launcher started and nothing else: a ComfyUI that was already running is left alone.
+# It then sits in the tray. Right-click the icon to open the app, read the logs, or quit. Quitting leaves
+# nothing of Frozen running and gives the VRAM back: it stops what this launcher started, then any of
+# Frozen's own engines that something else started. A ComfyUI that was already running is left running,
+# since it may be someone's, but is asked to drop its models. And a launcher that starts after one that
+# died stops what that one left behind first.
 #
 #   powershell -ExecutionPolicy Bypass -File launcher\Frozen.ps1                    start
 #   powershell -ExecutionPolicy Bypass -File launcher\Frozen.ps1 -Dev               start with the dev server
@@ -32,6 +35,8 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 $Root = Split-Path -Parent $PSScriptRoot
 $LogDir = Join-Path $Root 'logs'
+# What the launcher in the tray started, for the next launcher to read if this one never gets to quit
+$StateFile = Join-Path $LogDir 'launcher.json'
 $IconFile = Join-Path $PSScriptRoot 'frozen.ico'
 # The port is the one `start:prod` and `start:dev` in package.json listen on
 $AppUrl = 'http://localhost:8190'
@@ -155,8 +160,98 @@ function Read-DotEnv {
     return $values
 }
 
+# Ends a process and everything it started.
+#
+# taskkill runs inside cmd, which throws its messages away. It complains whenever part of the tree is already
+# gone (a service that left with its worker, say), and with $ErrorActionPreference at 'Stop' a complaint that
+# reaches PowerShell ends the whole quit halfway: the tray icon stays, and whatever was next in line,
+# ComfyUI with its models in VRAM, is never stopped.
+function Stop-ProcessTree([int]$Id) {
+    try { & cmd.exe /d /c "taskkill /PID $Id /T /F >nul 2>&1" | Out-Null } catch {}
+}
+
 function Stop-Tree($Process) {
-    if ($Process -and -not $Process.HasExited) { & taskkill.exe /PID $Process.Id /T /F 2>$null | Out-Null }
+    if ($Process -and -not $Process.HasExited) { Stop-ProcessTree $Process.Id }
+}
+
+# Writes down what this launcher started: each process id with the moment it started, which together name
+# one process for good (an id alone is handed out again once its process is gone).
+function Save-State {
+    $state = @{}
+    foreach ($name in @($script:started.Keys)) {
+        $process = $script:started[$name]
+        if ($name -eq 'build' -or $process.HasExited) { continue }
+        $state[$name] = @{ id = $process.Id; started = $process.StartTime.ToUniversalTime().Ticks }
+    }
+    $state | ConvertTo-Json | Set-Content -Path $StateFile -Encoding ASCII
+}
+
+# Stops what an earlier launcher started and never got to stop: it was killed, or Windows ended the session
+# under it. Its ComfyUI, app and worker would otherwise run on with nothing in the tray to quit them, and
+# keep the VRAM their models hold.
+#
+# Returns how many it stopped.
+function Stop-Orphans {
+    if (-not (Test-Path $StateFile)) { return 0 }
+
+    $count = 0
+    try {
+        $state = Get-Content $StateFile -Raw | ConvertFrom-Json
+        foreach ($entry in $state.PSObject.Properties) {
+            $process = Get-Process -Id ([int]$entry.Value.id) -ErrorAction SilentlyContinue
+            if (-not $process) { continue }
+            # Ticks are 100 ns: within two seconds is the same process, anything else a recycled id
+            $drift = [math]::Abs($process.StartTime.ToUniversalTime().Ticks - [int64]$entry.Value.started)
+            if ($drift -gt 20000000) { continue }
+
+            Stop-Tree $process
+            $count++
+        }
+    } catch {}
+    Remove-Item $StateFile -ErrorAction SilentlyContinue
+    return $count
+}
+
+# The engines the worker starts all live in this project's folders: the two Python services and sd-cli.
+# One that is still alive when Frozen quits (its worker was started by hand, or the service was) would keep
+# its model in VRAM, so quitting stops every one of them, whoever started it.
+function Stop-Engines {
+    $here = [regex]::Escape($Root)
+    $pattern = "$here[\\/](tts|caption)[\\/]server\.py|$here[\\/]sdcpp[\\/]"
+    Get-CimInstance Win32_Process |
+        Where-Object { $_.CommandLine -and $_.CommandLine -match $pattern } |
+        ForEach-Object { Stop-ProcessTree $_.ProcessId }
+}
+
+# A ComfyUI this launcher did not start may be someone's: Comfy Desktop's window, a terminal. It is left
+# running, but asked to drop its models, so the VRAM comes back all the same. One that nobody owns any more
+# (the program that started it is gone) is stopped like the rest.
+function Clear-Comfy {
+    if ($script:started.ContainsKey('comfyui')) { return }
+
+    $listener = Get-NetTCPConnection -LocalPort $comfyPort -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $listener) { return }
+    $top = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)"
+    if (-not $top -or $top.CommandLine -notmatch 'main\.py') { return }
+
+    # Python's launcher in a virtual environment runs the real interpreter as its child: climb to the top
+    $parent = $null
+    while ($true) {
+        $parent = Get-CimInstance Win32_Process -Filter "ProcessId = $($top.ParentProcessId)"
+        # A "parent" younger than its child is another process that was given the old id
+        if ($parent -and $parent.CreationDate -gt $top.CreationDate) { $parent = $null }
+        if (-not $parent -or $parent.Name -ne $top.Name) { break }
+        $top = $parent
+    }
+
+    if (-not $parent) {
+        Stop-ProcessTree $top.ProcessId
+        return
+    }
+    try {
+        Invoke-WebRequest -Uri "$comfyUrl/free" -Method Post -ContentType 'application/json' `
+            -Body '{"unload_models":true,"free_memory":true}' -UseBasicParsing -TimeoutSec 5 | Out-Null
+    } catch {}
 }
 
 # Starts a program without a window, its output going to logs\<name>.log (and <name>.err.log).
@@ -224,10 +319,17 @@ New-Item -ItemType Directory -Force $LogDir | Out-Null
 $env:PYTHONUTF8 = '1'
 $env:PYTHONIOENCODING = 'utf-8'
 
-# What this launcher started, by name. Only these are stopped on quit.
+# What this launcher started, by name
 $script:started = @{}
 $script:notes = @()
 $script:hasOpened = $false
+
+# No other launcher is running (the mutex says so), so anything the last one wrote down and that is still
+# alive has nobody to stop it
+if ((Stop-Orphans) -gt 0) {
+    $script:notes += 'An earlier Frozen had been left running; it was stopped first.'
+    Start-Sleep -Seconds 2
+}
 
 # ---------- ComfyUI ----------
 
@@ -289,6 +391,7 @@ if (-not (Test-Url "$comfyUrl/system_stats")) {
 
 function Start-App([string]$Script) {
     $script:started['app'] = Start-Hidden 'app' $bun @('run', $Script) $Root
+    Save-State
 }
 
 $script:isDev = [bool]$Dev
@@ -305,6 +408,7 @@ if (-not (Test-Url $AppUrl)) {
 # A second worker refuses to run while one is alive, so starting it is always safe
 $script:started['worker'] = Start-Hidden 'worker' $bun @('run', 'worker') $Root
 $script:workerStartedAt = Get-Date
+Save-State
 
 $startsApp = $script:started.ContainsKey('app') -or $script:started.ContainsKey('build')
 if (-not $startsApp -and -not $script:started.ContainsKey('comfyui')) {
@@ -321,18 +425,30 @@ if (-not $startsApp -and -not $script:started.ContainsKey('comfyui')) {
 
 # ---------- tray ----------
 
+# Quitting means nothing of Frozen is left and the VRAM is back: what this launcher started, and then the
+# engines and the ComfyUI memory that something else may have started (see Stop-Engines and Clear-Comfy).
+#
+# Every step is tried on its own: one that fails must not keep the others from running.
 function Stop-Everything {
     foreach ($name in @('worker', 'app', 'build', 'comfyui')) {
-        if ($script:started.ContainsKey($name)) { Stop-Tree $script:started[$name] }
+        try {
+            if ($script:started.ContainsKey($name)) { Stop-Tree $script:started[$name] }
+        } catch {}
     }
+    try { Stop-Engines } catch {}
+    try { Clear-Comfy } catch {}
+    Remove-Item $StateFile -ErrorAction SilentlyContinue
 }
 
 # Quitting, whether from the tray menu or from `-Quit`
 function Stop-Launcher {
     $timer.Stop()
-    Stop-Everything
-    $tray.Visible = $false
-    [System.Windows.Forms.Application]::Exit()
+    try {
+        Stop-Everything
+    } finally {
+        $tray.Visible = $false
+        [System.Windows.Forms.Application]::Exit()
+    }
 }
 
 $tray = New-Object System.Windows.Forms.NotifyIcon

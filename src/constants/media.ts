@@ -141,11 +141,13 @@ export const IMAGE_TURBO = {
 }
 
 /**
- * In the order the Image form lists their models.
+ * In the order the Image form lists their models. The first family that is installed is the default: its
+ * first model is what the form starts on, and what draws the first frame of a text-to-video job.
+ * MOSS-Image leads because its pictures came out best of the three when the owner compared them.
  */
 export const IMAGE_FAMILIES = [
-  "qwen",
   "moss",
+  "qwen",
   "iris"
 ] as const satisfies readonly Media.ImageFamily[]
 
@@ -335,4 +337,18 @@ export const UPLOAD_MAX_SIDE = 2048
 export const UPLOAD_MAX_BYTES = 24 * 1024 * 1024
 
 export const GALLERY_PAGE_SIZE = 36
-export const RECENT_JOBS = 18
+
+/**
+ * The gallery's filters, the first being what it opens on.
+ */
+export const GALLERY_KINDS = [
+  "image",
+  "video",
+  "audio",
+  "cutout"
+] as const satisfies readonly Media.GalleryKind[]
+
+/**
+ * How many jobs a recent strip holds: about two rows' worth, the rest is the gallery's.
+ */
+export const RECENT_JOBS = 12

@@ -20,6 +20,7 @@ import { imageValidator, type ImageValidator } from "@/actions/jobs/validator.zo
 import {
   ASPECTS,
   IMAGE_COUNTS,
+  IMAGE_FAMILIES,
   IMAGE_FAMILY_LABELS,
   IMAGE_FAMILY_SAMPLING,
   IMAGE_SAMPLER_LABELS,
@@ -221,7 +222,8 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
     (value: string) => {
       const previous = form.getValues("model")
       const next = imageFamily(value)
-      if (next !== (previous ? imageFamily(previous) : "qwen")) {
+      // With no model yet, the settings on screen are the default family's (IMAGE_FORM_DEFAULTS)
+      if (next !== (previous ? imageFamily(previous) : IMAGE_FAMILIES[0])) {
         form.setValue("steps", IMAGE_FAMILY_SAMPLING[next].steps)
         form.setValue("cfg", IMAGE_FAMILY_SAMPLING[next].cfg)
         form.setValue("sampler", null)

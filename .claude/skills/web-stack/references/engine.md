@@ -169,7 +169,9 @@ Rules that keep them honest:
   MOSS-Image, Iris). A file's family is read from its name (`imageFamily` in
   `@/libs/image-model`), `Engine.Models.image` lists each family's models, text encoders,
   VAE and LoRAs, and `IMAGE_FAMILY_SAMPLING` holds how each is sampled and whether it can
-  edit. Picking a model of another family resets the form's sampling to that family's. A
+  edit. Picking a model of another family resets the form's sampling to that family's. The
+  order of `IMAGE_FAMILIES` is the order of the Model list, so its first installed family
+  is the default: what the form starts on and what draws a text-to-video's first frame. A
   new family needs: its patterns in `discoverModels`, an entry in those constants, and an
   `add…Image` builder that `addImage` dispatches to. One that runs on stable-diffusion.cpp
   instead is found in `withSdCppModels` and given its arguments in `runSdCppJob`.
@@ -207,8 +209,9 @@ job.
   setting; the form marks those encoders "sd.cpp" and says what picking one does.
 - **What it adds to `Engine.Models`** (`withSdCppModels`): those encoders, appended to the
   Qwen family's list, and the whole Iris family, which has no VAE (`vae: null`) and whose
-  encoders are all GGUFs. `textEncodersFor` offers a Qwen model a GGUF encoder only when
-  it is a Turbo model in a GGUF file, the one combination that is set up and was tried.
+  encoders are all GGUFs. `textEncodersFor` pairs a Turbo model in a GGUF file with the
+  GGUF encoders and nothing else (ComfyUI's only when there are none), and gives every
+  other Qwen model ComfyUI's encoders.
 - **Two ways to sample.** A Turbo model gets `IMAGE_TURBO` whatever the job says. Iris
   gets the job's steps, CFG, sampler (`SAMPLER_NAMES` maps the form's names to the
   program's) and negative prompt.
@@ -370,7 +373,9 @@ curl -s -X POST http://127.0.0.1:8192/caption -H "Content-Type: application/json
    on a page of its own with a link in the header), and its result: in `job-result.tsx`,
    or a view of its own picked in `job-canvas.tsx` (`voice-result.tsx`,
    `caption-result.tsx`).
-6. The gallery tile and the recent strip, when the result isn't a picture.
+6. The gallery and the recent strip, when the result isn't a picture: the gallery shows
+   one kind at a time (`GALLERY_KINDS`), pictures and videos as a grid of tiles, voice
+   clips as a list of the rows the studio shows them in (`voice-clip.tsx`).
 
 ## Media on disk
 

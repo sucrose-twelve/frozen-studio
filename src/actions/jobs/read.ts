@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray } from "drizzle-orm"
+import { and, asc, count, desc, eq, inArray, ne } from "drizzle-orm"
 import { groupBy, pick } from "es-toolkit"
 
 import { GALLERY_PAGE_SIZE, RECENT_JOBS } from "@/constants"
@@ -242,19 +242,22 @@ export async function readAssets(ids: string[]): Promise<AssetView[]> {
 }
 
 /**
- * One page of finished results, newest first.
+ * One page of finished results of one kind, newest first.
  *
- * @param query.kind - Only images or only videos; `null` for both
+ * @param query.kind - Images, videos or voice clips, or `"cutout"`: the transparent copies, whichever kind
+ *   of job made them. They are images too, and are left out of `"image"` so each shows once
  * @param query.favorites - Only favorites
  */
 export async function readGallery(query: {
   page: number
-  kind: Media.AssetKind | null
+  kind: Media.GalleryKind
   favorites: boolean
 }): Promise<Pagination<GalleryItem>> {
   const filter = and(
     inArray(schema.assets.role, GALLERY_ROLES),
-    query.kind ? eq(schema.assets.kind, query.kind) : undefined,
+    query.kind === "cutout"
+      ? eq(schema.assets.role, "cutout")
+      : and(eq(schema.assets.kind, query.kind), ne(schema.assets.role, "cutout")),
     query.favorites ? eq(schema.assets.isFavorite, true) : undefined
   )
 

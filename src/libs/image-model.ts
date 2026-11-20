@@ -48,21 +48,26 @@ export function imageEngine(textEncoder: string | null | undefined): Media.Image
 }
 
 /**
- * The text encoders a model can be paired with, out of its family's.
+ * The text encoders a model can be paired with, out of its family's. A GGUF text encoder means the job
+ * runs on stable-diffusion.cpp, so this also decides the engine.
  *
- * A GGUF text encoder means the job runs on stable-diffusion.cpp. For Qwen-Image 2.1 that is only set up
- * for Turbo models in GGUF files, so those are the only ones offered such an encoder. Iris runs nowhere
- * else, and all its text encoders are GGUFs.
+ * - Iris runs nowhere else, and all its text encoders are GGUFs.
+ * - A Turbo model of Qwen-Image 2.1 in a GGUF file goes with the GGUF encoders published for it, and with
+ *   those only: that is the pair the owner wants it used as. Without any (stable-diffusion.cpp isn't
+ *   installed), it falls back to ComfyUI's encoders so the model can still run.
+ * - Every other model runs on ComfyUI, which can't read a GGUF text encoder.
  */
 export function textEncodersFor(
   installed: Engine.ImageModels | undefined,
   model: string
 ) {
   const all = installed?.textEncoders ?? []
-  const runsOnSdCpp =
-    imageFamily(model) === "iris" || (isGgufFile(model) && isTurboImageModel(model))
+  if (imageFamily(model) === "iris") return all
 
-  return runsOnSdCpp ? all : all.filter((name) => !isGgufFile(name))
+  const ggufs = all.filter(isGgufFile)
+  if (isGgufFile(model) && isTurboImageModel(model) && ggufs.length > 0) return ggufs
+
+  return all.filter((name) => !isGgufFile(name))
 }
 
 /**

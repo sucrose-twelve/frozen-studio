@@ -1,24 +1,32 @@
 "use client"
 
-import { ToggleButton, ToggleButtonGroup } from "@heroui/react"
 import { ImageSparkles, Mic, Scissors, VideoSparkles } from "@keyline-icons/react"
-import { useCallback, useEffect, useMemo } from "react"
+import { useCallback, useEffect } from "react"
 
-import { JOB_KIND_LABELS, STUDIO_MODES } from "@/constants"
+import { JOB_KIND_LABELS } from "@/constants"
 import { useStore } from "@/hooks"
 
 import { useStudioQuery } from "../hooks/use-studio-query"
 import { CutoutForm } from "./cutout-form"
 import { ImageForm } from "./image-form"
+import { KindSwitch, type KindItem } from "./kind-switch"
 import { VideoForm } from "./video-form"
 import { VoiceForm } from "./voice-form"
 
-const MODE_ICONS = {
-  image: ImageSparkles,
-  video: VideoSparkles,
-  cutout: Scissors,
-  voice: Mic
-} satisfies Record<Media.StudioMode, unknown>
+/**
+ * The modes that make something new, which the switch shows by name.
+ */
+const MAKER_MODES: KindItem<Media.StudioMode>[] = [
+  { id: "image", label: JOB_KIND_LABELS.image, Icon: ImageSparkles },
+  { id: "video", label: JOB_KIND_LABELS.video, Icon: VideoSparkles },
+  { id: "voice", label: JOB_KIND_LABELS.voice, Icon: Mic }
+]
+
+const CUTOUT_MODE: KindItem<Media.StudioMode> = {
+  id: "cutout",
+  label: JOB_KIND_LABELS.cutout,
+  Icon: Scissors
+}
 
 /**
  * The left panel: the mode switch and the four forms.
@@ -31,14 +39,9 @@ export function StudioForms() {
   const { query, setMode } = useStudioQuery()
   const prefill = useStore((state) => state.prefill)
   const mode = query.mode
-  const selectedKeys = useMemo(() => [mode], [mode])
 
-  const handleSelectionChange = useCallback(
-    (keys: Set<string | number>) => {
-      const [key] = keys
-      const next = STUDIO_MODES.find((kind) => kind === key)
-      if (next) void setMode(next)
-    },
+  const handleModeChange = useCallback(
+    (next: Media.StudioMode) => void setMode(next),
     [setMode]
   )
 
@@ -49,25 +52,13 @@ export function StudioForms() {
   return (
     <aside className='use-panel flex min-h-0 flex-col overflow-hidden'>
       <div className='border-separator border-b p-4'>
-        <ToggleButtonGroup
-          aria-label='Mode'
-          selectionMode='single'
-          fullWidth
-          disallowEmptySelection
-          selectedKeys={selectedKeys}
-          onSelectionChange={handleSelectionChange}>
-          {STUDIO_MODES.map((kind, index) => {
-            const Icon = MODE_ICONS[kind]
-
-            return (
-              <ToggleButton key={kind} id={kind} className='min-w-0 flex-1 px-2'>
-                {index > 0 ? <ToggleButtonGroup.Separator /> : null}
-                <Icon size={17} strokeWidth={1.75} />
-                {JOB_KIND_LABELS[kind]}
-              </ToggleButton>
-            )
-          })}
-        </ToggleButtonGroup>
+        <KindSwitch
+          label='Mode'
+          items={MAKER_MODES}
+          tool={CUTOUT_MODE}
+          value={mode}
+          onChange={handleModeChange}
+        />
       </div>
 
       <div className='min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-4'>

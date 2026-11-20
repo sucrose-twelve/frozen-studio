@@ -6,9 +6,9 @@
  * The worker (`bun run worker`) must be running to pick it up.
  */
 import { createJob } from "@/actions/jobs/create"
-import { IMAGE_DEFAULTS, LORA_STRENGTH } from "@/constants"
+import { IMAGE_DEFAULTS, IMAGE_FAMILY_SAMPLING, LORA_STRENGTH } from "@/constants"
 import { db } from "@/drizzle"
-import { imageFamily, listImageModels } from "@/libs/image-model"
+import { imageFamily, listImageModels, textEncodersFor } from "@/libs/image-model"
 import { readEngineStatus } from "@/libs/queue"
 import { redis } from "@/libs/redis"
 
@@ -21,7 +21,7 @@ if (!prompt) {
 const engine = await readEngineStatus()
 const model = listImageModels(engine?.models.image)[0]
 const textEncoder = model
-  ? engine?.models.image?.[imageFamily(model)]?.textEncoders[0]
+  ? textEncodersFor(engine?.models.image?.[imageFamily(model)], model)[0]
   : undefined
 
 if (!model || !textEncoder) {
@@ -37,8 +37,8 @@ if (!model || !textEncoder) {
     aspect: "1:1",
     tier: IMAGE_DEFAULTS.tier,
     count: 1,
-    steps: IMAGE_DEFAULTS.steps,
-    cfg: IMAGE_DEFAULTS.cfg,
+    steps: IMAGE_FAMILY_SAMPLING[imageFamily(model)].steps,
+    cfg: IMAGE_FAMILY_SAMPLING[imageFamily(model)].cfg,
     sampler: null,
     lora: null,
     loraStrength: LORA_STRENGTH.initial,

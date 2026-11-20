@@ -1,25 +1,33 @@
 "use client"
 
-import { ToggleButton } from "@heroui/react"
-import { Star } from "@keyline-icons/react"
+import { ImageSparkles, Mic, Scissors, Star, VideoSparkles } from "@keyline-icons/react"
 import { useQueryStates } from "nuqs"
-import { useCallback, useTransition } from "react"
+import { useCallback, useMemo, useTransition } from "react"
 
-import { OptionGroup, type Option } from "../../components/option-group"
+import { JOB_KIND_LABELS } from "@/constants"
+
+import { KindSwitch, type KindItem, type KindToggle } from "../../components/kind-switch"
 import { galleryParsers } from "../validator.nuqs"
 
-type KindChoice = Media.AssetKind | "all"
-
-const KIND_OPTIONS: Option<KindChoice>[] = [
-  { value: "all", label: "All" },
-  { value: "image", label: "Images" },
-  { value: "video", label: "Videos" },
-  { value: "audio", label: "Voice" }
+/**
+ * The same names and icons as the studio's mode switch: a voice clip is the "audio" kind of asset.
+ */
+const KIND_ITEMS: KindItem<Media.GalleryKind>[] = [
+  { id: "image", label: JOB_KIND_LABELS.image, Icon: ImageSparkles },
+  { id: "video", label: JOB_KIND_LABELS.video, Icon: VideoSparkles },
+  { id: "audio", label: JOB_KIND_LABELS.voice, Icon: Mic }
 ]
 
+const CUTOUT_ITEM: KindItem<Media.GalleryKind> = {
+  id: "cutout",
+  label: JOB_KIND_LABELS.cutout,
+  Icon: Scissors
+}
+
 /**
- * The gallery's filters, kept in the URL. A change re-renders the page on the server and goes back to the
- * first page, so a narrower filter never lands past the last one.
+ * The gallery's filters, kept in the URL and laid out like the studio's mode switch: which kind of result
+ * to show, and beside Cutout, as an icon, whether to show favorites only. A change re-renders the page on
+ * the server and goes back to the first page, so a narrower filter never lands past the last one.
  */
 export function GalleryFilters() {
   const [, startTransition] = useTransition()
@@ -29,31 +37,31 @@ export function GalleryFilters() {
   })
 
   const handleKindChange = useCallback(
-    (kind: KindChoice) => setQuery({ kind: kind === "all" ? null : kind, page: null }),
+    (kind: Media.GalleryKind) => setQuery({ kind, page: null }),
     [setQuery]
   )
-  const handleFavoritesChange = useCallback(
-    (isSelected: boolean) => setQuery({ favorites: isSelected || null, page: null }),
-    [setQuery]
+  const toggles = useMemo<KindToggle[]>(
+    () => [
+      {
+        id: "favorites",
+        label: "Favorites only",
+        Icon: Star,
+        isSelected: query.favorites,
+        onChange: (isSelected) => setQuery({ favorites: isSelected || null, page: null })
+      }
+    ],
+    [query.favorites, setQuery]
   )
 
   return (
-    <div className='flex items-center gap-3'>
-      <div className='w-80'>
-        <OptionGroup
-          label='Kind'
-          value={query.kind ?? "all"}
-          options={KIND_OPTIONS}
-          onChange={handleKindChange}
-        />
-      </div>
-      <ToggleButton
-        size='sm'
-        isSelected={query.favorites}
-        onChange={handleFavoritesChange}>
-        <Star size={15} strokeWidth={1.75} />
-        Favorites
-      </ToggleButton>
-    </div>
+    <KindSwitch
+      label='Kind'
+      className='w-96 max-w-full'
+      items={KIND_ITEMS}
+      tool={CUTOUT_ITEM}
+      toggles={toggles}
+      value={query.kind}
+      onChange={handleKindChange}
+    />
   )
 }

@@ -5,11 +5,11 @@ import { useMemo } from "react"
 
 import type { JobDetail } from "@/actions/jobs/read"
 import { scriptLines } from "@/libs/job"
-import { cls, formatElapsed, pad2 } from "@/libs/utils"
+import { formatElapsed } from "@/libs/utils"
 
 import { voiceLabel } from "../utils"
-import { DownloadButton, FavoriteButton } from "./asset-buttons"
 import { ResultActions } from "./result-actions"
+import { VoiceClip } from "./voice-clip"
 
 /**
  * The canvas for a finished voice job: every clip with the line it speaks, a player, and its own download
@@ -51,25 +51,13 @@ export function VoiceResult({
     <div className='flex min-h-0 flex-1 flex-col'>
       <ul className='use-dot-grid flex min-h-56 flex-1 flex-col gap-3 overflow-y-auto p-4'>
         {clips.map((clip) => (
-          <li
-            key={clip.id}
-            className={cls(
-              "use-panel mx-auto flex w-full max-w-3xl flex-col gap-2.5 p-3",
-              clip.id === assetId && "border-accent"
-            )}>
-            <div className='flex items-start gap-3'>
-              <span className='text-muted pt-1 font-mono text-xs tabular-nums'>
-                {pad2(clip.position + 1)}
-              </span>
-              <p lang='ja' className='min-w-0 flex-1 pt-0.5 text-sm leading-relaxed'>
-                {lines[clip.position] ?? ""}
-              </p>
-              <div className='flex shrink-0 items-center gap-1'>
-                <DownloadButton asset={clip} isLabeled={false} />
-                <FavoriteButton asset={clip} />
-              </div>
-            </div>
-            <audio controls preload='metadata' src={clip.url} className='h-9 w-full' />
+          <li key={clip.id} className='mx-auto w-full max-w-3xl'>
+            <VoiceClip
+              clip={clip}
+              text={lines[clip.position] ?? ""}
+              number={clip.position + 1}
+              isHighlighted={clip.id === assetId}
+            />
           </li>
         ))}
       </ul>

@@ -11,6 +11,12 @@ declare namespace Media {
   export type AssetKind = "image" | "video" | "audio"
 
   /**
+   * What the gallery shows at a time: one kind of result, or the cutouts, which are images but are kept
+   * apart from the images they were cut from.
+   */
+  export type GalleryKind = AssetKind | "cutout"
+
+  /**
    * What an asset is to its job:
    *
    * - `upload`: a reference image the user added (no job made it)
