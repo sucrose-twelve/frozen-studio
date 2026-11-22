@@ -12,7 +12,7 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod"
 import { ImageSparkles } from "@keyline-icons/react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useForm, useWatch } from "react-hook-form"
+import { Controller, useForm, useWatch } from "react-hook-form"
 
 import { createJob } from "@/actions/jobs/create"
 import type { AssetView } from "@/actions/jobs/read"
@@ -56,6 +56,7 @@ import {
 } from "./form-parts"
 import { ModelSelect } from "./model-select"
 import { OptionGroup, type Option } from "./option-group"
+import { PromptField } from "./prompt-field"
 import { ReferencePicker } from "./reference-picker"
 import { SubmitBar } from "./submit-bar"
 
@@ -149,9 +150,21 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
   // A GGUF text encoder moves the job to stable-diffusion.cpp
   const isSdCpp = imageEngine(textEncoder) === "sdcpp"
   const canEdit = canEditImages(model, installed?.[family])
+  // The text encoder is out of sight unless there is a choice, so the model list says which models run on
+  // stable-diffusion.cpp
   const modelOptions = useMemo(
-    () => (models ?? []).map((name) => ({ id: name, label: modelLabel(name) })),
-    [models]
+    () =>
+      (models ?? []).map((name) => {
+        const firstEncoder = textEncodersFor(installed?.[imageFamily(name)], name)[0]
+        const label = modelLabel(name)
+
+        return {
+          id: name,
+          label:
+            imageEngine(firstEncoder ?? null) === "sdcpp" ? `${label} · sd.cpp` : label
+        }
+      }),
+    [models, installed]
   )
   const textEncoderOptions = useMemo(
     () =>
@@ -161,6 +174,9 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
       })),
     [textEncoders]
   )
+  // Most models go with one text encoder, picked for them; the choice shows when more of their kind are
+  // installed
+  const hasTextEncoderChoice = textEncoderOptions.length > 1
   // A Turbo model runs its own fixed schedule: the sampling settings show it and can't be changed
   const isTurbo = isTurboImageModel(model)
   const shownSteps = isTurbo ? IMAGE_TURBO.steps : steps
@@ -398,6 +414,9 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
     if (!isActive) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Keys pressed in a dialog belong to it: the prompt's own has a copy that isn't in the form yet
+      if (event.target instanceof Element && event.target.closest("[role='dialog']"))
+        return
       if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) void handleSubmit()
     }
 
@@ -413,35 +432,39 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
         value={model}
         onChange={handleModelChange}
       />
-      <ModelSelect
-        title='Text encoder'
-        label='Text encoder'
-        models={textEncoderOptions}
-        value={textEncoder}
-        onChange={handleTextEncoderChange}
-      />
+      {hasTextEncoderChoice ? (
+        <ModelSelect
+          title='Text encoder'
+          label='Text encoder'
+          models={textEncoderOptions}
+          value={textEncoder}
+          onChange={handleTextEncoderChange}
+        />
+      ) : null}
       {isSdCpp ? (
         <p className='text-muted -mt-3 text-xs'>
-          This text encoder is a GGUF, which only stable-diffusion.cpp reads: the job runs
-          there instead of on ComfyUI, and loads its models anew every time.
+          This model's text encoder is a GGUF, which only stable-diffusion.cpp reads: the
+          job runs there instead of on ComfyUI, and loads its models anew every time.
         </p>
       ) : null}
 
       <FormSection title='Prompt'>
-        <TextArea
-          aria-label='Prompt'
-          fullWidth
-          rows={6}
-          variant='secondary'
-          className='resize-y'
-          placeholder={
-            !hasReferences
-              ? "Describe the image in plain sentences: subject, setting, light, style."
-              : family === "moss"
-                ? "Describe only the change, and what to keep: “Change only the jacket to a black wool coat. Keep the face, hair, pose and background unchanged.” With more images, say what each one is for."
-                : "What to change, in plain sentences. Say what to keep, and which image is which: “Dress the woman in image 1 in the outfit from image 2. Keep her pose.”"
-          }
-          {...form.register("prompt")}
+        <Controller
+          control={form.control}
+          name='prompt'
+          render={({ field }) => (
+            <PromptField
+              label='Prompt'
+              placeholder={
+                !hasReferences
+                  ? "Describe the image in plain sentences: subject, setting, light, style."
+                  : family === "moss"
+                    ? "Describe only the change, and what to keep: “Change only the jacket to a black wool coat. Keep the face, hair, pose and background unchanged.” With more images, say what each one is for."
+                    : "What to change, in plain sentences. Say what to keep, and which image is which: “Dress the woman in image 1 in the outfit from image 2. Keep her pose.”"
+              }
+              {...field}
+            />
+          )}
         />
         <FieldMessage message={errors.prompt?.message} />
       </FormSection>

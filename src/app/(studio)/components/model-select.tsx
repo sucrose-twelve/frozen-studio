@@ -18,7 +18,7 @@ export type ModelOption = {
  * disabled; the form's submit bar says what is missing.
  *
  * A model that works in several files gets one of these per file the user can swap, each under its own
- * `title` (the Image form's text encoder).
+ * `title` (the Image form's text encoder, shown when a model has more than one installed).
  *
  * @param label - Names the control for screen readers, e.g. "Image model"
  * @param models - What is installed, as the engine reports it
