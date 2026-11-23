@@ -138,7 +138,7 @@ export function JobResult({
         </div>
 
         {job.prompt ? (
-          <p className='text-muted line-clamp-2 text-sm' title={job.prompt}>
+          <p className='text-muted line-clamp-4 text-sm' title={job.prompt}>
             {job.prompt}
           </p>
         ) : null}

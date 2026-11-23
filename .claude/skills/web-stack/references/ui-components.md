@@ -95,7 +95,13 @@ also goes to the page the form is on.
 in their own zone under a `FormDivider` and an "Advanced" `FormSection`.
 
 A control that can't apply right now stays on screen, disabled, with its description
-saying why ("Needs a background removal model in ComfyUI."), rather than disappearing.
+saying why ("Needs a background removal model in ComfyUI."), rather than disappearing. The
+one exception is the Image form's **Reference images**: the owner asked for it to be
+hidden for a model that can't edit (`canEditImages`: Turbo, Iris, MOSS-Image, Sakura), and
+references already picked are removed with a toast saying why.
+
+One-line fields are all **36px** tall: `.input` and `.select__trigger` are set to `h-9` in
+`custom.css` (HeroUI's padding made them 38px); `NumberField` is 36px already.
 
 ### Status and jobs
 
@@ -112,9 +118,10 @@ The header keeps the two apart:
   `Engine.Status.memory`; the chip is hidden while the worker isn't running.
 - `JobToasts` shows each queued or running job as a toast in the shared stack (`toast()`
   from `@heroui/react`): kept open with its progress and a Cancel button, then updated in
-  place to Done (with Open), Failed or Canceled for a few seconds. A page names a job from
-  the `brief` on its queued event, or from `readActiveJobs` for jobs already active when
-  it rendered.
+  place to Done (with Open), Failed or Canceled for a few seconds. The stack is always
+  expanded (`isExpanded` on the `Toaster`, up to 5 at once). A page names a job from the
+  `brief` on its queued event, or from `readActiveJobs` for jobs already active when it
+  rendered.
 
 ### Destructive actions
 

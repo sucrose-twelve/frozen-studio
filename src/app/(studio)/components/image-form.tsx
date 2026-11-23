@@ -214,11 +214,7 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
         : "ComfyUI is offline. Start it to load its image models."
       : !engine.isComfyOnline && !isSdCpp
         ? "ComfyUI is offline, and this model runs on it."
-        : hasReferences && !canEdit
-          ? sampling.editing === "lora"
-            ? `${IMAGE_FAMILY_LABELS[family]} needs its edit LoRA in ComfyUI to take reference images.`
-            : "This model only draws new images. Remove the references, or pick another model to edit them."
-          : null
+        : null
 
   // Puts a family's own steps and guidance on screen: those of a new image, or of an edit
   const applySampling = useCallback(
@@ -352,6 +348,17 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
   useDefaultModel(models, model, handleModelChange)
   useDefaultModel(textEncoders, textEncoder, handleTextEncoderChange)
 
+  // A model that only draws new images has no reference images: the section is hidden, and any that were
+  // there (picked for another model, or sent over from a result) are taken out with a word why
+  useEffect(() => {
+    if (canEdit || !model || form.getValues("references").length === 0) return
+
+    handleReferencesChange([])
+    toast(`${modelLabel(model)} doesn't take reference images`, {
+      description: "They were removed. Pick a Qwen-Image model to edit or mix images."
+    })
+  }, [canEdit, model, form, handleReferencesChange])
+
   // A LoRA that is gone (deleted since, or brought in by "Reuse settings" from an old job) is dropped
   useEffect(() => {
     if (lora && loras && !loras.includes(lora)) form.setValue("lora", null)
@@ -456,11 +463,9 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
             <PromptField
               label='Prompt'
               placeholder={
-                !hasReferences
-                  ? "Describe the image in plain sentences: subject, setting, light, style."
-                  : family === "moss"
-                    ? "Describe only the change, and what to keep: “Change only the jacket to a black wool coat. Keep the face, hair, pose and background unchanged.” With more images, say what each one is for."
-                    : "What to change, in plain sentences. Say what to keep, and which image is which: “Dress the woman in image 1 in the outfit from image 2. Keep her pose.”"
+                hasReferences
+                  ? "What to change, in plain sentences. Say what to keep, and which image is which: “Dress the woman in image 1 in the outfit from image 2. Keep her pose.”"
+                  : "Describe the image in plain sentences: subject, setting, light, style."
               }
               {...field}
             />
@@ -469,18 +474,20 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
         <FieldMessage message={errors.prompt?.message} />
       </FormSection>
 
-      <FormSection
-        title='Reference images'
-        note={`${references.length} / ${MAX_REFERENCES.image} · optional`}>
-        <ReferencePicker
-          value={references}
-          onChange={handleReferencesChange}
-          max={MAX_REFERENCES.image}
-          isOrdered
-          isActive={isActive}
-          hint='Drop, paste or pick images to edit or to borrow from'
-        />
-      </FormSection>
+      {canEdit ? (
+        <FormSection
+          title='Reference images'
+          note={`${references.length} / ${MAX_REFERENCES.image} · optional`}>
+          <ReferencePicker
+            value={references}
+            onChange={handleReferencesChange}
+            max={MAX_REFERENCES.image}
+            isOrdered
+            isActive={isActive}
+            hint='Drop, paste or pick images to edit or to borrow from'
+          />
+        </FormSection>
+      ) : null}
 
       <FormSection title='Output' note={sizeNote}>
         <FieldRow

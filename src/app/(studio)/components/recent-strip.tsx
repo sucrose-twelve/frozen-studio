@@ -9,7 +9,6 @@ import {
   Scissors
 } from "@keyline-icons/react"
 import Image from "next/image"
-import NextLink from "next/link"
 
 import type { JobSummary } from "@/actions/jobs/read"
 import { ACTIVE_JOB_STATUSES, JOB_KIND_LABELS, JOB_STATUS_LABELS } from "@/constants"
@@ -101,15 +100,7 @@ export function RecentStrip({
   if (jobs.length === 0) return null
 
   return (
-    <div className='border-separator flex items-center gap-4 border-t px-4 py-3'>
-      <div className='shrink-0'>
-        <p className='text-sm font-semibold'>Recent</p>
-        <NextLink
-          href='/gallery'
-          className='text-muted hover:text-foreground text-xs transition-colors'>
-          Open gallery
-        </NextLink>
-      </div>
+    <div className='border-separator border-t px-4 py-3'>
       <ul className='flex min-w-0 flex-1 gap-2 overflow-x-auto py-0.5'>
         {jobs.map((job) => (
           <RecentJob

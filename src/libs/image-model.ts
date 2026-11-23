@@ -26,11 +26,14 @@ export function isTurboImageModel(fileName: string) {
 }
 
 /**
- * Whether a model can take reference images, i.e. edit. The form and `createJob` both ask this.
+ * Whether a model can take reference images, i.e. edit. The form (which hides its reference images
+ * otherwise) and `createJob` both ask this.
  *
  * - A Turbo model can't, though its family can: given a reference it returns it burnt and over-sharpened
  *   (tried with one reference on its own schedule).
- * - MOSS-Image can once its edit LoRA is installed.
+ * - MOSS-Image and the Sakura quantizations of Qwen-Image 2.1 aren't offered it: in the owner's tests they
+ *   followed reference images poorly, MOSS-Image with its edit LoRA too. The LoRA's wiring stays in place
+ *   (`IMAGE_FAMILY_SAMPLING.moss`, the image graph) for when a better one comes out.
  *
  * @param installed - What the model's family has installed, which is where an edit LoRA shows up
  */
@@ -38,7 +41,8 @@ export function canEditImages(
   fileName: string,
   installed: Engine.ImageModels | undefined
 ) {
-  if (isTurboImageModel(fileName)) return false
+  if (isTurboImageModel(fileName) || /sakura/i.test(fileName)) return false
+  if (imageFamily(fileName) === "moss") return false
 
   const { editing } = IMAGE_FAMILY_SAMPLING[imageFamily(fileName)]
   return editing === "built-in" || (editing === "lora" && !!installed?.editLora)

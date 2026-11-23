@@ -407,4 +407,4 @@ export const GALLERY_KINDS = [
 /**
  * How many jobs a recent strip holds: about two rows' worth, the rest is the gallery's.
  */
-export const RECENT_JOBS = 12
+export const RECENT_JOBS = 16

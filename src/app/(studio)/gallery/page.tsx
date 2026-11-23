@@ -74,7 +74,6 @@ function GalleryTile({ item, href }: Readonly<{ item: GalleryItem; href: string 
         replace
         scroll={false}
         prefetch={false}
-        title={item.prompt || undefined}
         style={{ aspectRatio: aspect }}
         className={cls(
           "after:ring-border hover:after:ring-glacier relative block w-full overflow-hidden rounded-md after:absolute after:inset-0 after:rounded-[inherit] after:ring-1 after:transition-colors after:ring-inset",

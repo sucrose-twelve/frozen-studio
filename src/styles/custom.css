@@ -37,6 +37,20 @@
   }
 
   /**
+   * Every one-line field is 36px tall. HeroUI's text input and select trigger grow to 38px from their padding
+   * and line height (the number field is 36px already), so they get the height outright and centre their
+   * text instead.
+   */
+  .input,
+  .select__trigger {
+    @apply h-9 py-0;
+  }
+
+  .select__trigger {
+    @apply items-center;
+  }
+
+  /**
    * HeroUI fills a selected toggle with the soft accent, which on this dark palette comes out darker than
    * an unselected one. Glacier makes the chosen option the brightest in its row instead.
    */

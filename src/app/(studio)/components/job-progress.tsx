@@ -85,7 +85,7 @@ export function JobProgress({
         </p>
 
         {job.prompt ? (
-          <p className='border-separator text-muted line-clamp-3 border-l-2 pl-3 text-sm italic'>
+          <p className='border-separator text-muted line-clamp-6 border-l-2 pl-3 text-sm italic'>
             {job.prompt}
           </p>
         ) : null}
