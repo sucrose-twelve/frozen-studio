@@ -28,7 +28,7 @@ v4 differences from v3 (don't use the v3 forms):
   (throw).
 - One schema serves both client (react-hook-form resolver) and server (action) — import
   the same validator. Job forms live in `actions/jobs/validator.zod.ts`: one validator per
-  kind (`imageValidator`, `videoValidator`, `cutoutValidator`) and `jobValidator`, their
+  kind (`imageValidator`, `cutoutValidator`, `voiceValidator`) and `jobValidator`, their
   discriminated union on `kind`, which is what `createJob` parses.
 - Validators take their allowed values from `@/constants` (`z.enum(ASPECTS)`); they don't
   define lists.
@@ -171,15 +171,6 @@ import { groupBy, pick } from "es-toolkit"
 - Format dates with date-fns, not hand-rolled math. Timestamps in the DB are
   `timestamptz`; the app TZ is `ENV.TZ`.
 - Short run times on the canvas use `formatElapsed(ms)` from `@/libs/utils` (`"1:26"`).
-
-## Zip files and recorded video (no library)
-
-- `createZip(entries)` in `@/libs/zip` packs files into a stored (uncompressed) archive.
-  That is enough for PNG and video, which are compressed already, and it saved adding a
-  zip dependency. Reach for a real library only if something needs compression.
-- A short animation is recorded with the browser's own `MediaRecorder` from a canvas
-  (`recordPreview` in `@/libs/sprite-sheet`). It works in real time, so it takes as long
-  as the clip lasts, and it keeps transparency. A GIF would need an encoder library.
 
 ## redis (node-redis v6)
 

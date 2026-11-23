@@ -1,6 +1,5 @@
 export const JOB_KINDS = [
   "image",
-  "video",
   "cutout",
   "voice",
   "caption"
@@ -11,14 +10,12 @@ export const JOB_KINDS = [
  */
 export const STUDIO_MODES = [
   "image",
-  "video",
   "cutout",
   "voice"
 ] as const satisfies readonly Media.StudioMode[]
 
 export const JOB_KIND_LABELS: Record<Media.JobKind, string> = {
   image: "Image",
-  video: "Video",
   cutout: "Cutout",
   voice: "Voice",
   caption: "Caption"
@@ -142,7 +139,7 @@ export const IMAGE_TURBO = {
 
 /**
  * In the order the Image form lists their models. The first family that is installed is the default: its
- * first model is what the form starts on, and what draws the first frame of a text-to-video job.
+ * first model is what the form starts on.
  * MOSS-Image leads because its pictures came out best of the three when the owner compared them.
  */
 export const IMAGE_FAMILIES = [
@@ -237,98 +234,7 @@ export const MOSS_EDIT_NEGATIVE = "worst quality, bad anatomy, watermark, jpeg a
  */
 export const LORA_STRENGTH = { min: 0, max: 2, step: 0.05, initial: 0.8 } as const
 
-export const MAX_REFERENCES = { image: 4, video: 6, cutout: 12, caption: 8 } as const
-
-export const VIDEO_SECONDS = [1, 2, 3, 5, 10, 15, 20] as const
-
-export const VIDEO_RESOLUTIONS = [
-  480, 720
-] as const satisfies readonly Media.VideoResolution[]
-
-/**
- * Pixel budget per resolution: the width and height are solved from it and the aspect ratio.
- */
-export const VIDEO_AREAS: Record<Media.VideoResolution, number> = {
-  480: 832 * 480,
-  720: 1280 * 720
-}
-
-/**
- * The order the Video form lists the families in. The first one installed is what the form starts on.
- */
-export const VIDEO_FAMILIES = [
-  "wan",
-  "ltx"
-] as const satisfies readonly Media.VideoFamily[]
-
-/**
- * What the form and the workflow need to know about a video family.
- *
- * - `fps`: the frame rate the model was trained at, which the video and its sprite sheets play at
- * - `frameStep`: a pass makes `k × frameStep + 1` frames, the model's own grid in time
- * - `sizeStep`: the grid the width and height are rounded to
- * - `passSeconds`: the longest stretch one pass makes at each resolution; longer videos are chained from
- *   passes
- * - `steps`: the range the form offers and where it starts
- * - `maxReferences`: how many images a job takes. More than one are keyframes
- */
-type VideoFamilySettings = {
-  fps: number
-  frameStep: number
-  sizeStep: number
-  passSeconds: Record<Media.VideoResolution, number>
-  steps: { min: number; max: number; initial: number }
-  cfg: number
-  maxReferences: number
-}
-
-/**
- * - Wan 2.2: 16 fps, and a pass holds together for about 5 seconds (81 frames). 20 steps at CFG 3.5 is its
- *   stock schedule; `VIDEO_SAMPLING.fast` replaces it in fast mode.
- * - LTX 2.5: 24 fps. The build this was set up with has its distillation LoRA merged in, so it always runs
- *   few steps at CFG 1: 8 is what its card recommends, 4 still works for text to video, and 16 is its
- *   stated ceiling. It takes one image, the first frame. On a 16 GB card one pass holds 10 seconds at 480p
- *   or 5 at 720p (about 100 seconds of work either way); 10 seconds at 720p in one pass was still sampling
- *   after 9 minutes.
- */
-export const VIDEO_FAMILY_SETTINGS: Record<Media.VideoFamily, VideoFamilySettings> = {
-  wan: {
-    fps: 16,
-    frameStep: 4,
-    sizeStep: 16,
-    passSeconds: { 480: 5, 720: 5 },
-    steps: { min: 4, max: 50, initial: 20 },
-    cfg: 3.5,
-    maxReferences: MAX_REFERENCES.video
-  },
-  ltx: {
-    fps: 24,
-    frameStep: 8,
-    sizeStep: 32,
-    passSeconds: { 480: 10, 720: 5 },
-    steps: { min: 4, max: 16, initial: 8 },
-    cfg: 1,
-    maxReferences: 1
-  }
-}
-
-/**
- * Sampling settings for Wan 2.2: the 4-step Lightning LoRAs when `isFast`, the stock schedule otherwise.
- */
-export const VIDEO_SAMPLING = {
-  fast: { steps: 4, cfg: 1 },
-  full: {
-    steps: VIDEO_FAMILY_SETTINGS.wan.steps.initial,
-    cfg: VIDEO_FAMILY_SETTINGS.wan.cfg
-  }
-} as const
-
-/**
- * The steps any video job can ask for; each family narrows it (`VIDEO_FAMILY_SETTINGS`). On Wan the
- * high-noise model takes the first half and the low-noise model the rest, so there have to be a few for
- * each. Fast mode is not adjustable: its LoRAs were made for exactly 4 steps.
- */
-export const VIDEO_STEPS = { min: 4, max: 50 } as const
+export const MAX_REFERENCES = { image: 4, cutout: 12, caption: 8 } as const
 
 /**
  * A voice job speaks one clip per line of its script.
@@ -494,7 +400,6 @@ export const GALLERY_PAGE_SIZE = 36
  */
 export const GALLERY_KINDS = [
   "image",
-  "video",
   "audio",
   "cutout"
 ] as const satisfies readonly Media.GalleryKind[]

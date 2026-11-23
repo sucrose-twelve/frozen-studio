@@ -90,7 +90,7 @@ export function PromptField({
         isDismissable={false}
         isKeyboardDismissDisabled>
         <Modal.Container size='lg'>
-          <Modal.Dialog className='sm:max-w-2xl'>
+          <Modal.Dialog className='max-w-2xl'>
             <Modal.CloseTrigger />
             <Modal.Header>
               <Modal.Heading>{label}</Modal.Heading>

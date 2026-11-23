@@ -60,7 +60,7 @@ export const assets = pgTable.withRLS(
     width: integer("width").notNull(),
     height: integer("height").notNull(),
     size: bigint("size_bytes", { mode: "number" }).notNull(),
-    // Order within the job and role: image 1, 2, … or the frame number
+    // Order within the job and role: image 1, 2, … or the line of a voice script
     position: integer("position").notNull().default(0),
     isFavorite: boolean("is_favorite").notNull().default(false),
     ...sharedTimestampColumns

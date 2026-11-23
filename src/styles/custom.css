@@ -55,3 +55,14 @@
     --toggle-button-fg-selected: var(--night);
   }
 }
+
+/**
+ * The app is laid out for a desktop window at least 1280px wide (`xl`) and nothing narrower. Below that, every
+ * child of `body` but `NarrowWindowNotice` is hidden: the page, and the dialogs and toasts portalled next to
+ * it. Outside any layer, so it beats a component's own `display` (a modal's backdrop is `flex`).
+ */
+body > :not([data-narrow-notice]) {
+  @variant max-xl {
+    display: none;
+  }
+}

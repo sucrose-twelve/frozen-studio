@@ -5,7 +5,7 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job_inputs
    ▲            │  ▲
    │ SSE        │  └────── Redis       frozen:queue · frozen:engine · frozen:events · frozen:control
    └────────────┘             ▲
-                              │            ┌──► ComfyUI ──────────► images, videos
+                              │            ┌──► ComfyUI ──────────► images, cutouts
                               │            ├──► sdcpp/ (sd-cli) ──► images: GGUF text encoders, Iris
                            Worker ─────────┼──► tts/server.py ────► voice clips
                                            └──► caption/server.py ► descriptions and prompts
@@ -21,8 +21,8 @@ Two processes share this repo:
 
 And four engines do the generating:
 
-- **ComfyUI**, for image, video and cutout jobs. It is a separate program, started by hand
-  or by `launcher/Frozen.ps1`; the worker waits for it and never starts or stops it.
+- **ComfyUI**, for image and cutout jobs. It is a separate program, started by hand or by
+  `launcher/Frozen.ps1`; the worker waits for it and never starts or stops it.
 - **stable-diffusion.cpp** (`sdcpp/bin/sd-cli.exe`), for the image jobs ComfyUI can't run:
   those with a text encoder that comes as a GGUF, which includes every Iris job. The
   worker runs it once per job. See [stable-diffusion.cpp](#stable-diffusioncpp).
@@ -73,10 +73,10 @@ Every change is published as `{ type: "job", id, status, error? }`.
 `createJob` (`actions/jobs/create.ts`):
 
 1. Parses the form with `jobValidator` (a union on `kind`).
-2. Turns the form into stored **params** (`toImageParams` / `toVideoParams` /
-   `toVoiceParams` in `@/libs/job`): resolves the pixel size, picks a random seed when
-   none was given, and drops options the installed models can't honour (fast mode without
-   the LoRAs).
+2. Turns the form into stored **params** (`toImageParams` / `toVoiceParams` /
+   `toCaptionParams` in `@/libs/job`): resolves the pixel size, picks a random seed when
+   none was given, and drops options the engine can't honour (a cutout copy on
+   stable-diffusion.cpp).
 3. Inserts the `jobs` row and its `job_inputs` (the reference images, in order).
 4. Pushes the id onto the queue and returns it, so the client can put the job on the
    canvas.
@@ -155,39 +155,24 @@ return builder.build()
 | File        | Builds                                                                                                                                                                                                                   |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `image.ts`  | `addImage`, on the model's family: Qwen-Image 2.1 (text to image, an edit with references, a Turbo build on its fixed schedule) or MOSS-Image (text to image, an edit with its edit LoRA). Optional LoRA and cutout copy |
-| `video.ts`  | On the model's family. Wan 2.2 I2V: one or more passes (`planSegments`), joined; the first frame is drawn with `addImage` when no image is given. LTX 2.5: text or one image to video                                    |
 | `cutout.ts` | BiRefNet background removal for one image                                                                                                                                                                                |
 
 Rules that keep them honest:
 
 - **The model is the job's choice.** Each form starts with a `ModelSelect` over what
   `Engine.Models` lists for its kind, and the pick is stored in the job's params
-  (`params.model`). For video one choice is a pair of Wan files (`Engine.VideoModel`),
-  matched up by name in `pairVideoModels`, or one LTX file. The Image form has a second
-  one for the text encoder (`params.textEncoder`), since more than one build of it can be
-  installed.
+  (`params.model`). The Image form has a second one for the text encoder
+  (`params.textEncoder`), since more than one build of it can be installed.
 - **The Image form runs more than one family** (`Media.ImageFamily`: Qwen-Image 2.1,
   MOSS-Image, Iris). A file's family is read from its name (`imageFamily` in
   `@/libs/image-model`), `Engine.Models.image` lists each family's models, text encoders,
   VAE and LoRAs, and `IMAGE_FAMILY_SAMPLING` holds how each is sampled and whether it can
   edit. Picking a model of another family resets the form's sampling to that family's. The
   order of `IMAGE_FAMILIES` is the order of the Model list, so its first installed family
-  is the default: what the form starts on and what draws a text-to-video's first frame. A
-  new family needs: its patterns in `discoverModels`, an entry in those constants, and an
-  `add…Image` builder that `addImage` dispatches to. One that runs on stable-diffusion.cpp
-  instead is found in `withSdCppModels` and given its arguments in `runSdCppJob`.
-- **The Video form runs two families** (`Media.VideoFamily`: Wan 2.2, LTX 2.5), read from
-  the model's name (`videoFamily` in `@/libs/video-model`). `VIDEO_FAMILY_SETTINGS` holds
-  what differs: the frame rate (16 and 24 fps), the frame and size grids, how long one
-  pass is, the range of steps, and how many images a job takes. Nothing stores the frame
-  rate: the sprite sheet builder and the form's summary read it from the family of the
-  job's model. LTX has no fast mode, loop or keyframes, and runs at CFG 1, so the form
-  shows those options disabled and `toVideoParams` stores what really ran.
-- **LTX runs on ComfyUI's own nodes**, with the GGUF read by ComfyUI-GGUF's
-  `UnetLoaderGGUF`. Its release's workflows use a loader pack of their own
-  (`LTXV25ModelsLoader`, `LTXV25AVDecode`); that is not needed. The model also makes
-  sound, and that half is left out: the video latent is sampled alone, so no audio VAE is
-  loaded and the MP4 is silent.
+  is the default: what the form starts on. A new family needs: its patterns in
+  `discoverModels`, an entry in those constants, and an `add…Image` builder that
+  `addImage` dispatches to. One that runs on stable-diffusion.cpp instead is found in
+  `withSdCppModels` and given its arguments in `runSdCppJob`.
 - **A model that runs one way only says so in code, not in the form's values.** A Turbo
   image model (`isTurboImageModel`, by file name) always gets `IMAGE_TURBO`: the builder
   ignores the job's steps, CFG and sampler, `toImageParams` stores what really ran, and
@@ -211,9 +196,9 @@ Rules that keep them honest:
 - **What a model needs is written where it is used**, as a comment with the reason: the
   sampler per mode, the negative prompt that must not be empty, the 32px size grid. Those
   were found by testing; don't "simplify" them away.
-- **Sizes and lengths are computed in one place** (`@/constants/media.ts`,
-  `@/libs/video-plan.ts`) and used by both the form's summary line and the builder, so the
-  UI never promises what the workflow doesn't do.
+- **Sizes are computed in one place** (`IMAGE_SIZES` in `@/constants/media.ts`) and used
+  by both the form's summary line and the builder, so the UI never promises what the
+  workflow doesn't do.
 - Check a node's inputs against the running ComfyUI before using it:
   `curl -s http://127.0.0.1:8188/object_info/<NodeClass>`.
 
@@ -411,8 +396,8 @@ curl -s -X POST http://127.0.0.1:8192/caption -H "Content-Type: application/json
    or a view of its own picked in `job-canvas.tsx` (`voice-result.tsx`,
    `caption-result.tsx`).
 6. The gallery and the recent strip, when the result isn't a picture: the gallery shows
-   one kind at a time (`GALLERY_KINDS`), pictures and videos as a grid of tiles, voice
-   clips as a list of the rows the studio shows them in (`voice-clip.tsx`).
+   one kind at a time (`GALLERY_KINDS`), pictures as a grid of tiles, voice clips as a
+   list of the rows the studio shows them in (`voice-clip.tsx`).
 
 ## Media on disk
 
@@ -433,11 +418,10 @@ with (`COMFY_INPUT_DIR`, `COMFY_OUTPUT_DIR`), inside a `frozen/` subfolder
   (`@/libs/upload`), so ComfyUI never meets an odd format.
 - An earlier result can be a reference: `LoadImage` reads from the output directory when
   the name ends in ` [output]` (`comfyImageName`).
-- Asset **kinds**: `image`, `video`, `audio`. An audio asset has no pixel size; its
-  `width` and `height` are 0, and its `position` is the line of the script it speaks.
+- Asset **kinds**: `image`, `audio`. An audio asset has no pixel size; its `width` and
+  `height` are 0, and its `position` is the line of the script it speaks.
 - Asset **roles**: `upload` (a reference), `output` (the result), `cutout` (its
-  transparent copy), `frame` (a saved video frame), `still` (the first frame drawn for a
-  text-to-video).
+  transparent copy).
 - Deleting a job removes its rows (assets cascade) and its folder. Uploads stay: other
   jobs may use them.
 - The voice service only writes under the folder it was started with (`--output-root`).
@@ -446,12 +430,7 @@ with (`COMFY_INPUT_DIR`, `COMFY_OUTPUT_DIR`), inside a `frozen/` subfolder
 
 - The worker reports which other programs hold VRAM (`worker/gpu.ts`, a Windows
   performance counter read through PowerShell). From 1 GB up the header warns: with a game
-  open, the video models spill into shared memory and a job that takes a minute takes ten.
-- The two Wan models don't fit together in 16 GB, so every video pass loads one, then the
-  other. A long or multi-keyframe video pays that swap per pass.
-- LTX 2.5 as a Q4 GGUF (14 GB) almost fills the card by itself. What one pass can hold was
-  measured, and is in `VIDEO_FAMILY_SETTINGS` (`passSeconds`) and beside the decode in
-  `video.ts`: past it the work spills into shared memory and takes many times longer.
+  open, the models spill into shared memory and a job that takes a minute takes ten.
 - **The engines take turns** (`claimGpu` in `worker/service.ts`). Before a voice or
   caption job the worker asks ComfyUI to drop its models (`freeComfyMemory`) and the other
   service to unload; before a ComfyUI job both services unload; before a

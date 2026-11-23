@@ -6,9 +6,9 @@ import {
   RefreshCw,
   ScanText,
   Scissors,
-  SlidersHorizontal,
-  VideoSparkles
+  SlidersHorizontal
 } from "@keyline-icons/react"
+import { usePathname, useRouter } from "next/navigation"
 import { useCallback, useState } from "react"
 
 import { createJob, rerollJob } from "@/actions/jobs/create"
@@ -25,7 +25,10 @@ const ICON = { size: 15, strokeWidth: 1.75 } as const
  * What can be done with a finished job: roll it again, reuse its settings, delete it. With a result on the
  * canvas there is more: send the image on to another form, download it, keep it.
  *
- * @param asset - The image or video currently shown. Left out where a job shows all its results at once
+ * A job these start (a reroll, a cutout) shows on the studio's canvas, so from another page (the gallery's
+ * viewer) they go to the studio.
+ *
+ * @param asset - The image currently shown. Left out where a job shows all its results at once
  *   (voice clips), each with its own buttons
  */
 export function ResultActions({
@@ -37,16 +40,26 @@ export function ResultActions({
 }>) {
   const { showJob } = useStudioQuery()
   const requestPrefill = usePrefill()
+  const router = useRouter()
+  const pathname = usePathname()
   const [pending, setPending] = useState<"reroll" | "cutout" | null>(null)
+
+  const openJob = useCallback(
+    (id: string | null, mode: Media.StudioMode) => {
+      if (pathname === "/") void showJob(id)
+      else if (id) router.push(`/?job=${id}&mode=${mode}`)
+    },
+    [pathname, showJob, router]
+  )
 
   const handleReroll = useCallback(async () => {
     setPending("reroll")
     const result = await rerollJob({ id: job.id })
     setPending(null)
 
-    if (result.ok) void showJob(result.id)
+    if (result.ok) openJob(result.id, job.kind === "caption" ? "image" : job.kind)
     else toast.danger(result.message)
-  }, [job.id, showJob])
+  }, [job.id, job.kind, openJob])
 
   const handleReuse = useCallback(
     () => requestPrefill({ kind: job.kind, references: job.inputs, source: job }),
@@ -54,9 +67,6 @@ export function ResultActions({
   )
   const handleUseAsReference = useCallback(() => {
     if (asset) requestPrefill({ kind: "image", references: [asset], source: null })
-  }, [asset, requestPrefill])
-  const handleAnimate = useCallback(() => {
-    if (asset) requestPrefill({ kind: "video", references: [asset], source: null })
   }, [asset, requestPrefill])
 
   const handleDescribe = useCallback(() => {
@@ -70,9 +80,9 @@ export function ResultActions({
     const result = await createJob({ kind: "cutout", references: [asset.id] })
     setPending(null)
 
-    if (result.ok) void showJob(result.ids[0] ?? null)
+    if (result.ok) openJob(result.ids[0] ?? null, "cutout")
     else toast.danger(result.message)
-  }, [asset, showJob])
+  }, [asset, openJob])
 
   return (
     <div className='flex flex-wrap items-center gap-2'>
@@ -94,10 +104,6 @@ export function ResultActions({
           <Button variant='secondary' size='sm' onPress={handleUseAsReference}>
             <ImagePlus {...ICON} />
             Use as reference
-          </Button>
-          <Button variant='secondary' size='sm' onPress={handleAnimate}>
-            <VideoSparkles {...ICON} />
-            Animate
           </Button>
           {asset.role === "cutout" ? null : (
             <Button

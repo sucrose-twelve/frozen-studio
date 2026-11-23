@@ -1,5 +1,6 @@
 import { NuqsAdapter } from "nuqs/adapters/next/app"
 
+import { NarrowWindowNotice } from "@/components/narrow-window-notice"
 import { Toaster } from "@/components/toaster"
 import { Locales } from "@/constants/enum"
 import { fontGeist, fontGeistMono, fontJapanese, fontThai } from "@/constants/fonts"
@@ -29,6 +30,7 @@ export default function RootLayout({
           fontThai.variable,
           fontJapanese.variable
         )}>
+        <NarrowWindowNotice />
         <NuqsAdapter>{children}</NuqsAdapter>
         <Toaster />
       </body>

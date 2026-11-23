@@ -10,13 +10,7 @@ import {
   listImageModels,
   textEncodersFor
 } from "@/libs/image-model"
-import {
-  randomSeed,
-  toCaptionParams,
-  toImageParams,
-  toVideoParams,
-  toVoiceParams
-} from "@/libs/job"
+import { randomSeed, toCaptionParams, toImageParams, toVoiceParams } from "@/libs/job"
 import { enqueueJobs, readEngineStatus } from "@/libs/queue"
 
 import { jobIdValidator, jobValidator } from "./validator.zod"
@@ -52,12 +46,18 @@ async function saveAndEnqueue(drafts: Draft[]) {
     return rows.map((row) => row.id)
   })
 
-  await enqueueJobs(ids)
+  await enqueueJobs(
+    ids.map((id, index) => ({
+      id,
+      kind: drafts[index].kind,
+      prompt: drafts[index].prompt
+    }))
+  )
   return ids
 }
 
 /**
- * Queues what a studio form asks for: one image, video or voice job, or one cutout or caption job per
+ * Queues what a studio form asks for: one image or voice job, or one cutout or caption job per
  * image.
  *
  * @param input - A form's values; see `jobValidator`
@@ -128,20 +128,6 @@ export async function createJob(input: unknown) {
           kind: "image",
           prompt: data.prompt,
           params: toImageParams(data),
-          references: data.references
-        }
-      ]
-      break
-    }
-    case "video": {
-      const result = toVideoParams(data, engine?.models ?? null)
-      if (!result.ok) return { ok: false as const, message: result.message }
-
-      drafts = [
-        {
-          kind: "video",
-          prompt: data.prompt,
-          params: result.params,
           references: data.references
         }
       ]

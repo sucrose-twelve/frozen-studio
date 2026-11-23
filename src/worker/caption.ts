@@ -27,6 +27,7 @@ const SERVER_SCRIPT = "caption/server.py"
 
 const service = createPythonService({
   name: "caption",
+  label: "Caption · Ministral 3",
   python: CAPTION.python,
   script: SERVER_SCRIPT,
   port: CAPTION.port,

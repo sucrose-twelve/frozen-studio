@@ -1,16 +1,19 @@
-import { ChevronLeft, ChevronRight, SquareArrowOutUpRight } from "@keyline-icons/react"
-import { Play, Star } from "@keyline-icons/react/fill"
+import { Images, SquareArrowOutUpRight } from "@keyline-icons/react"
+import { Star } from "@keyline-icons/react/fill"
 import type { Metadata } from "next"
 import Image from "next/image"
 import NextLink from "next/link"
+import { z } from "zod"
 
-import { readGallery, type GalleryItem } from "@/actions/jobs/read"
+import { readAssetJob, readGallery, type GalleryItem } from "@/actions/jobs/read"
 import { GALLERY_KINDS } from "@/constants"
 import { cls } from "@/libs/utils"
 
 import { DeleteJobButton } from "../components/delete-job-button"
 import { VoiceClip } from "../components/voice-clip"
 import { GalleryFilters } from "./components/gallery-filters"
+import { GalleryLoader } from "./components/gallery-loader"
+import { GalleryViewer } from "./components/gallery-viewer"
 import { queryValidator, type QueryValidator } from "./validator.nuqs"
 
 export const instant = false
@@ -25,54 +28,77 @@ function studioHref(item: GalleryItem) {
 }
 
 /**
- * A link to another page of the gallery that keeps the current filters.
+ * The gallery as it is, with one result open in the viewer: the filters and how far it has loaded stay, so
+ * the list behind the dialog doesn't change.
  */
-function pageHref(query: QueryValidator, page: number) {
+function viewerHref(query: QueryValidator, assetId: string) {
   const params = new URLSearchParams()
-  if (page > 1) params.set("page", String(page))
+  if (query.page > 1) params.set("page", String(query.page))
   if (query.kind !== GALLERY_KINDS[0]) params.set("kind", query.kind)
   if (query.favorites) params.set("favorites", "true")
+  params.set("asset", assetId)
 
-  const search = params.toString()
-  return search ? `/gallery?${search}` : "/gallery"
+  return `/gallery?${params.toString()}`
 }
 
 /**
- * One picture or video: a link back into the studio, with a delete button over its corner.
+ * Width over height of a result, from the size stored with it, so its tile has its shape before the file
+ * loads. Anything without a picture (stored as 0 × 0) is square.
+ */
+function aspectOf(asset: GalleryItem["asset"]) {
+  return asset.width > 0 && asset.height > 0 ? asset.width / asset.height : 1
+}
+
+/**
+ * One picture: a link that opens it in the viewer, with a delete button over its corner. The link replaces
+ * the history entry and keeps the scroll, so closing the viewer is where it was. A picture whose job made
+ * more than one (of its role) shows how many in its top-left corner: the viewer pages through them all.
+ *
+ * The tile is one item of a justified row (see `Gallery`): it starts `--row-height` tall at its own
+ * aspect, and grows by its aspect too, so every tile of a row ends up the same height and the row fills
+ * the width exactly.
  *
  * The button sits beside the link, not inside it: a button in a link is not valid, and its press would
  * follow the link. It shows on hover or keyboard focus, and always where there is no hover (touch).
  */
-function GalleryTile({ item }: Readonly<{ item: GalleryItem }>) {
-  const { asset, poster } = item
-  const cover = asset.kind === "image" ? asset : poster
+function GalleryTile({ item, href }: Readonly<{ item: GalleryItem; href: string }>) {
+  const { asset } = item
+  const aspect = aspectOf(asset)
 
   return (
-    <div className='group relative'>
+    <li
+      className='group relative'
+      style={{ flexGrow: aspect, flexBasis: `calc(var(--row-height) * ${aspect})` }}>
       <NextLink
-        href={studioHref(item)}
+        href={href}
+        replace
+        scroll={false}
+        prefetch={false}
         title={item.prompt || undefined}
+        style={{ aspectRatio: aspect }}
         className={cls(
-          "border-border hover:border-glacier relative block aspect-square overflow-hidden rounded-xl border transition-colors",
+          "after:ring-border hover:after:ring-glacier relative block w-full overflow-hidden rounded-md after:absolute after:inset-0 after:rounded-[inherit] after:ring-1 after:transition-colors after:ring-inset",
           asset.role === "cutout" ? "use-checkerboard" : "bg-surface-secondary"
         )}>
-        {cover ? (
-          <Image
-            src={cover.url}
-            alt={item.prompt || "Result"}
-            width={cover.width}
-            height={cover.height}
-            sizes='(min-width: 1280px) 16vw, (min-width: 768px) 25vw, 50vw'
-            quality={75}
-            className='size-full object-contain transition-transform duration-300'
-          />
-        ) : null}
+        <Image
+          src={asset.url}
+          alt={item.prompt || "Result"}
+          width={asset.width}
+          height={asset.height}
+          // A row grows past `--row-height` to fill the width, but rarely past 1.5 times it
+          sizes={`${Math.ceil(aspect * 360)}px`}
+          quality={75}
+          className='size-full object-cover'
+        />
 
-        {asset.kind === "video" ? (
-          <span className='bg-night/70 text-frost absolute bottom-2 left-2 grid size-7 place-items-center rounded-full'>
-            <Play size={13} />
+        {item.setSize > 1 ? (
+          <span className='bg-night/70 text-frost absolute top-2 left-2 inline-flex h-7 items-center gap-1 rounded-full px-2 text-xs font-medium tabular-nums'>
+            <Images size={14} strokeWidth={1.75} aria-hidden />
+            {item.setSize}
+            <span className='sr-only'>images</span>
           </span>
         ) : null}
+
         {asset.isFavorite ? (
           <span className='bg-night/70 text-warning absolute top-2 right-2 grid size-7 place-items-center rounded-full'>
             <Star size={14} />
@@ -87,7 +113,7 @@ function GalleryTile({ item }: Readonly<{ item: GalleryItem }>) {
           className='bg-night/75 text-frost hover:bg-night rounded-full'
         />
       </div>
-    </div>
+    </li>
   )
 }
 
@@ -111,12 +137,22 @@ function GalleryClip({ item }: Readonly<{ item: GalleryItem }>) {
 }
 
 /**
- * The finished results of one kind, newest first. Pictures and videos are a grid that opens a result back
- * in the studio; voice clips are a list, since what tells them apart is a line of text and its sound.
+ * The finished results of one kind, newest first, loading the next page as the end comes into view.
+ * Pictures are justified rows, and one opens in a viewer over the list (`?asset=`); voice clips are a
+ * list, since what tells them apart is a line of text and its sound.
+ *
+ * The rows are plain flex wrapping, no measuring: each tile grows in proportion to its aspect, so a row's
+ * tiles share one height and keep their shape at any width. The `::after` takes the free space of the last
+ * row, which would otherwise stretch its few tiles to the full width.
  */
 export default async function Gallery({ searchParams }: NextSearchParams) {
   const query = queryValidator.parse(await searchParams)
-  const page = await readGallery(query)
+  const assetId = z.uuid().safeParse(query.asset).success ? query.asset : null
+
+  const [page, viewed] = await Promise.all([
+    readGallery(query),
+    assetId ? readAssetJob(assetId) : null
+  ])
 
   return (
     <section className='max-w-9xl mx-auto flex w-full flex-col gap-6 px-5 py-8'>
@@ -142,11 +178,13 @@ export default async function Gallery({ searchParams }: NextSearchParams) {
           ))}
         </ul>
       ) : page.data.length > 0 ? (
-        <ul className='grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6'>
+        <ul className='flex flex-wrap gap-1.5 [--row-height:14rem] after:grow-[1000000]'>
           {page.data.map((item) => (
-            <li key={item.asset.id}>
-              <GalleryTile item={item} />
-            </li>
+            <GalleryTile
+              key={item.asset.id}
+              item={item}
+              href={viewerHref(query, item.asset.id)}
+            />
           ))}
         </ul>
       ) : (
@@ -160,31 +198,8 @@ export default async function Gallery({ searchParams }: NextSearchParams) {
         </div>
       )}
 
-      {page.lastPage > 1 ? (
-        <nav
-          aria-label='Pages'
-          className='flex items-center justify-center gap-4 text-sm'>
-          {page.prevPage ? (
-            <NextLink
-              href={pageHref(query, page.prevPage)}
-              className='hover:bg-surface inline-flex h-9 items-center gap-1 rounded-full px-3 font-medium transition-colors'>
-              <ChevronLeft size={16} strokeWidth={1.75} />
-              Previous
-            </NextLink>
-          ) : null}
-          <span className='text-muted tabular-nums'>
-            Page {page.currentPage} of {page.lastPage}
-          </span>
-          {page.nextPage ? (
-            <NextLink
-              href={pageHref(query, page.nextPage)}
-              className='hover:bg-surface inline-flex h-9 items-center gap-1 rounded-full px-3 font-medium transition-colors'>
-              Next
-              <ChevronRight size={16} strokeWidth={1.75} />
-            </NextLink>
-          ) : null}
-        </nav>
-      ) : null}
+      <GalleryLoader hasMore={page.nextPage !== null} />
+      <GalleryViewer key={assetId ?? "none"} job={viewed} assetId={assetId} />
     </section>
   )
 }

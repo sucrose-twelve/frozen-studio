@@ -1,6 +1,6 @@
 "use client"
 
-import { ImageSparkles, Mic, Scissors, Star, VideoSparkles } from "@keyline-icons/react"
+import { ImageSparkles, Mic, Scissors, Star } from "@keyline-icons/react"
 import { useQueryStates } from "nuqs"
 import { useCallback, useMemo, useTransition } from "react"
 
@@ -14,7 +14,6 @@ import { galleryParsers } from "../validator.nuqs"
  */
 const KIND_ITEMS: KindItem<Media.GalleryKind>[] = [
   { id: "image", label: JOB_KIND_LABELS.image, Icon: ImageSparkles },
-  { id: "video", label: JOB_KIND_LABELS.video, Icon: VideoSparkles },
   { id: "audio", label: JOB_KIND_LABELS.voice, Icon: Mic }
 ]
 
@@ -27,7 +26,7 @@ const CUTOUT_ITEM: KindItem<Media.GalleryKind> = {
 /**
  * The gallery's filters, kept in the URL and laid out like the studio's mode switch: which kind of result
  * to show, and beside Cutout, as an icon, whether to show favorites only. A change re-renders the page on
- * the server and goes back to the first page, so a narrower filter never lands past the last one.
+ * the server and starts the scrolled list over from its first page.
  */
 export function GalleryFilters() {
   const [, startTransition] = useTransition()

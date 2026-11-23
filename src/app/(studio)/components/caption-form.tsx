@@ -45,7 +45,7 @@ const PROMPT_PLACEHOLDERS: Record<Media.CaptionMode, string> = {
   prompts:
     "Optional. What the model should attend to, or how it should write: focus on the clothing and the pose, keep the prompt short…",
   answer:
-    "Ask about the image, or say what to write: What is she holding? · Write a prompt that animates this picture."
+    "Ask about the image, or say what to write: What is she holding? · Write a prompt for this scene at night."
 }
 
 /**
@@ -218,7 +218,7 @@ export function CaptionForm({ isActive }: Readonly<{ isActive: boolean }>) {
         <p className='text-muted text-xs'>
           {isAnswer
             ? "An answer has no positive prompt. Say in the prompt how it should be written."
-            : "Sentences suit Qwen-Image and Wan, which read a prompt like a description. Tags suit models trained on tag lists."}
+            : "Sentences suit Qwen-Image and MOSS-Image, which read a prompt like a description. Tags suit models trained on tag lists."}
         </p>
       </FormSection>
 

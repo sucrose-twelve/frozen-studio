@@ -337,7 +337,7 @@ function addMossImage(builder: GraphBuilder, options: ImageOptions): NodeRef {
  * @returns The decoded image batch
  * @throws {Error} When the model's family is missing a part (text encoder, VAE), or doesn't run on ComfyUI
  */
-export function addImage(
+function addImage(
   builder: GraphBuilder,
   image: Engine.Models["image"],
   request: ImageRequest

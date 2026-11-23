@@ -13,7 +13,7 @@ export function outputPrefix(jobId: string, name: string) {
 /**
  * Loads a reference image with any transparency flattened onto white.
  *
- * `LoadImage` drops the alpha channel and keeps whatever colour sits under it, which for a sprite cut out
+ * `LoadImage` drops the alpha channel and keeps whatever colour sits under it, which for an image cut out
  * elsewhere is usually black. Its second output is the inverted alpha (1 where transparent), so pasting
  * white through that mask fills exactly the transparent area; an image without alpha comes through
  * untouched.

@@ -10,9 +10,6 @@ import {
   IMAGE_TIERS,
   LORA_STRENGTH,
   MAX_REFERENCES,
-  VIDEO_RESOLUTIONS,
-  VIDEO_SECONDS,
-  VIDEO_STEPS,
   VOICE_MAX_LINE_LENGTH,
   VOICE_MAX_LINES
 } from "@/constants"
@@ -61,28 +58,6 @@ export const imageValidator = z
   })
 
 export type ImageValidator = z.infer<typeof imageValidator>
-
-export const videoValidator = z.object({
-  kind: z.literal("video"),
-  model: z.string().min(1, { error: "Pick a model" }),
-  prompt,
-  references: z.array(z.uuid()).max(MAX_REFERENCES.video),
-  seconds: literals(VIDEO_SECONDS),
-  resolution: literals(VIDEO_RESOLUTIONS),
-  // Only used without references; the first reference decides the shape otherwise
-  aspect: z.enum(ASPECTS),
-  isStaticCamera: z.boolean(),
-  isLoop: z.boolean(),
-  isFast: z.boolean(),
-  // For the full schedule; fast mode has its own fixed count
-  steps: z.number().int().min(VIDEO_STEPS.min).max(VIDEO_STEPS.max),
-  negative: z.string().trim().max(2_000),
-  seed,
-  shouldSaveFrames: z.boolean(),
-  shouldRemoveBackground: z.boolean()
-})
-
-export type VideoValidator = z.infer<typeof videoValidator>
 
 export const cutoutValidator = z.object({
   kind: z.literal("cutout"),
@@ -142,7 +117,6 @@ export type CaptionValidator = z.infer<typeof captionValidator>
 
 export const jobValidator = z.discriminatedUnion("kind", [
   imageValidator,
-  videoValidator,
   cutoutValidator,
   voiceValidator,
   captionValidator

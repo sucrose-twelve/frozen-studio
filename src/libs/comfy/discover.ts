@@ -16,47 +16,6 @@ function pick(names: string[], ...patterns: RegExp[]) {
 }
 
 /**
- * The part of a Wan file name that says which half of the pair it is: "HighNoise", "_low_noise", "-high".
- */
-const NOISE_MARK = /[-_ .]?(?:high|low)(?:[-_ ]?noise)?/i
-
-/**
- * Pairs up the Wan 2.2 image-to-video files: a high-noise and a low-noise file belong together when their
- * names are the same but for that word. A file without its other half is left out, since a video needs
- * both.
- *
- * @example
- * // [{ name: "Wan2.2-I2V-A14B-Q5_K_M", highNoise: "…HighNoise-Q5_K_M.gguf", lowNoise: "…LowNoise-Q5_K_M.gguf" }]
- * pairVideoModels(["Wan2.2-I2V-A14B-HighNoise-Q5_K_M.gguf", "Wan2.2-I2V-A14B-LowNoise-Q5_K_M.gguf"])
- */
-function pairVideoModels(names: string[]): Engine.VideoModel[] {
-  const sharedName = (name: string) =>
-    name.replace(NOISE_MARK, "").replace(/\.(gguf|safetensors)$/i, "")
-  const lows = names.filter((name) => /wan2\.2.*i2v.*low/i.test(name))
-
-  return names
-    .filter((name) => /wan2\.2.*i2v.*high/i.test(name))
-    .flatMap((highNoise) => {
-      const name = sharedName(highNoise)
-      const lowNoise = lows.find((low) => sharedName(low) === name)
-
-      return lowNoise ? [{ name, highNoise, lowNoise }] : []
-    })
-}
-
-/**
- * An LTX 2.5 diffusion model, as a GGUF or as safetensors.
- */
-const LTX_MODEL = /ltx.?2\.?5/i
-
-/**
- * The text encoder LTX 2.5 reads prompts with: Gemma 4 12B in the build that carries LTX's projection
- * layers, which is what makes ComfyUI load it as LTX's encoder. A plain Gemma 4 file has none and says no
- * "ltx" in its name.
- */
-const LTX_TEXT_ENCODER = /gemma.?4.*ltx|ltx.*gemma.?4/i
-
-/**
  * A Qwen-Image 2.1 diffusion model, under its own name or as one of the Sakura quantizations of it.
  */
 const IMAGE_MODEL = /(?:qwen|sakura).?image.?2\.1/i
@@ -107,10 +66,6 @@ function preferring(names: string[], pattern: RegExp) {
  * - Image, second family: MOSS-Image diffusion models, with the Qwen3.5 9B text encoder and the FLUX.2
  *   VAE. LoRAs with "moss" in their name are offered with them, except its edit LoRA, which is what
  *   lets the family take reference images
- * - Video: Wan 2.2 image-to-video GGUFs in pairs (high and low noise), the umT5 text encoder and the Wan
- *   VAE; the Lightning LoRAs are optional and switch on the fast mode
- * - Video, second family: LTX 2.5 diffusion models (GGUF or safetensors), its Gemma 4 text encoder and its
- *   video VAE. Its audio VAE is not asked for: the workflow makes no sound
  * - Cutout: any model in `models/background_removal`
  */
 export async function discoverModels(): Promise<ComfyModels> {
@@ -156,32 +111,8 @@ export async function discoverModels(): Promise<ComfyModels> {
     }
   }
 
-  const videoModels = pairVideoModels(gguf)
-  const videoTextEncoder = pick(textEncoders, /umt5/i)
-  const videoVae = pick(vaes, /wan2?\.?1.*vae/i, /wan.*vae/i)
-  const wan =
-    videoModels.length > 0 && videoTextEncoder && videoVae
-      ? {
-          models: videoModels,
-          textEncoder: videoTextEncoder,
-          vae: videoVae,
-          fastHighNoise: pick(loras, /wan2\.2_i2v.*lightx2v.*high/i),
-          fastLowNoise: pick(loras, /wan2\.2_i2v.*lightx2v.*low/i)
-        }
-      : null
-
-  const ltxModels = [...gguf, ...diffusion].filter((name) => LTX_MODEL.test(name))
-  const ltxTextEncoder = pick(textEncoders, LTX_TEXT_ENCODER)
-  // The release names both of its VAEs "ltx…vae"; the audio one is the wrong kind of model here
-  const ltxVae = pick(vaes, /ltx.*video.?vae/i, /ltx(?!.*audio).*vae/i)
-  const ltx =
-    ltxModels.length > 0 && ltxTextEncoder && ltxVae
-      ? { models: ltxModels, textEncoder: ltxTextEncoder, vae: ltxVae }
-      : null
-
   return {
     image: image.qwen || image.moss ? image : null,
-    video: wan || ltx ? { wan, ltx } : null,
     cutout: backgroundRemoval[0] ? { model: backgroundRemoval[0] } : null
   }
 }

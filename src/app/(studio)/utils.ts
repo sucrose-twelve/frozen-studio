@@ -1,7 +1,7 @@
+import type { AssetView, JobDetail } from "@/actions/jobs/read"
 import type {
   CaptionValidator,
   ImageValidator,
-  VideoValidator,
   VoiceValidator
 } from "@/actions/jobs/validator.zod"
 import {
@@ -9,12 +9,14 @@ import {
   IMAGE_FAMILIES,
   IMAGE_FAMILY_LABELS,
   IMAGE_FAMILY_SAMPLING,
+  IMAGE_SAMPLER_LABELS,
   LORA_STRENGTH,
-  VIDEO_SAMPLING,
   VOICE_CUSTOM,
   VOICE_FAMILIES,
   VOICE_PRESETS
 } from "@/constants"
+import { imageEngine } from "@/libs/image-model"
+import { formatElapsed } from "@/libs/utils"
 
 /**
  * The Image form before a model is picked. Its sampling is the default family's; picking a model of
@@ -36,24 +38,6 @@ export const IMAGE_FORM_DEFAULTS: ImageValidator = {
   lora: null,
   loraStrength: LORA_STRENGTH.initial,
   seed: null,
-  shouldRemoveBackground: false
-}
-
-export const VIDEO_FORM_DEFAULTS: VideoValidator = {
-  kind: "video",
-  model: "",
-  prompt: "",
-  references: [],
-  seconds: 5,
-  resolution: 480,
-  aspect: "16:9",
-  isStaticCamera: false,
-  isLoop: false,
-  isFast: true,
-  steps: VIDEO_SAMPLING.full.steps,
-  negative: "",
-  seed: null,
-  shouldSaveFrames: false,
   shouldRemoveBackground: false
 }
 
@@ -136,4 +120,26 @@ export function loraLabel(fileName: string) {
 export function parseSeed(text: string) {
   const digits = text.replace(/\D/g, "")
   return digits ? Math.min(Number(digits), 2 ** 48) : null
+}
+
+/**
+ * The facts worth a chip under a result: its size, the settings that shaped it, the seed and the run time.
+ */
+export function resultFacts(job: JobDetail, asset: AssetView) {
+  const facts = [`${asset.width} × ${asset.height}`]
+  const params = job.params
+
+  if (params.kind === "image") {
+    facts.push(`${params.steps} steps · CFG ${params.cfg}`)
+    // Only a sampler that was picked by hand is worth a chip; "Auto" is the usual case
+    if (params.sampler) facts.push(IMAGE_SAMPLER_LABELS[params.sampler])
+    if (params.lora) facts.push(`LoRA ${params.lora.strength}`)
+    if (imageEngine(params.textEncoder) === "sdcpp") facts.push("sd.cpp")
+    facts.push(`seed ${params.seed}`)
+  }
+  if (job.startedAt && job.finishedAt) {
+    facts.push(formatElapsed(job.finishedAt - job.startedAt))
+  }
+
+  return facts
 }

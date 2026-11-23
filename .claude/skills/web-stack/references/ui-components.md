@@ -44,7 +44,9 @@ Don't write a component from memory. In order of preference:
 | `Separator`            | A 1px rule; `className='h-0.5'` for the thick one between form zones                                                                               | `form-parts.tsx`        |
 | `Modal`                | `<Modal>` > trigger `Button` + `Modal.Backdrop` > `Modal.Container size` > `Modal.Dialog` > `CloseTrigger`, `Header` > `Heading`, `Body`           | `job-result.tsx`        |
 | `AlertDialog`          | Controlled: `useOverlayState()` + `<AlertDialog.Backdrop isOpen onOpenChange>` > `Container` > `Dialog` > `Header`, `Body`, `Footer`               | `delete-job-button.tsx` |
-| `Tooltip`              | `<Tooltip delay>` > `Tooltip.Trigger` + `Tooltip.Content placement`                                                                                | `engine-status.tsx`     |
+| `Tooltip`              | `<Tooltip delay>` > `Tooltip.Trigger` + `Tooltip.Content placement`                                                                                | `memory-status.tsx`     |
+| `Meter`                | `value`, `maxValue`, `size='sm'`, `color`, `aria-label`; `Meter.Track` > `Meter.Fill`                                                              | `memory-status.tsx`     |
+| `Popover`              | `<Popover>` > `Popover.Trigger` (styled as the chip) + `Popover.Content placement` > `Popover.Dialog` > `Popover.Heading`                          | `engine-status.tsx`     |
 | `ProgressBar`          | `value`, `isIndeterminate`; `ProgressBar.Track` > `ProgressBar.Fill`                                                                               | `job-progress.tsx`      |
 | `Chip`                 | `variant='soft'`, `size='sm'`                                                                                                                      | `job-result.tsx`        |
 | `Spinner`              | `size`, `color='current'`                                                                                                                          | `recent-strip.tsx`      |
@@ -84,16 +86,35 @@ Buttons that act on one result live in `asset-buttons.tsx` (`DownloadButton`,
 delete with its confirmation. `VoiceClip` is one voice clip as a row (its line, a player,
 its buttons), shared by the studio's voice result and the gallery's voice list. A
 caption's result is text (`caption-result.tsx`): each piece has a copy button, and its
-prompts go to the Image or Video form as a `Prefill` with `prompt`, which changes the
-form's text and nothing else. Send a `Prefill` with `usePrefill`, not the store's
-`requestPrefill`: it also goes to the page the form is on.
+prompts go to the Image form as a `Prefill` with `prompt`, which changes the form's text
+and nothing else. Send a `Prefill` with `usePrefill`, not the store's `requestPrefill`: it
+also goes to the page the form is on.
 
 **Every setting is visible.** Don't tuck settings into a `Disclosure`, accordion or
 "Advanced" toggle: the owner asked for them to be shown outright, with the less-used ones
 in their own zone under a `FormDivider` and an "Advanced" `FormSection`.
 
 A control that can't apply right now stays on screen, disabled, with its description
-saying why ("Needs two or more keyframes."), rather than disappearing.
+saying why ("Needs a background removal model in ComfyUI."), rather than disappearing.
+
+### Status and jobs
+
+The header keeps the two apart:
+
+- `EngineStatus` is the chip: **Online** while the worker reports, **Offline** when it
+  doesn't, with an amber light when something it needs is down or another program holds
+  VRAM. Pressing it opens a `Popover` listing the worker and every `Engine.Service` the
+  worker reported (ComfyUI, Postgres, Redis, the Python services). A Python service that
+  isn't running is "Starts when needed", not offline.
+- `MemoryStatus` sits beside it: RAM and VRAM as used/total with a small `Meter` each
+  (amber past 75%, red past 90%), and used and free in a `Tooltip`. The worker reads them
+  each beat (`worker/memory.ts`: `os` for RAM, `nvidia-smi` for VRAM) into
+  `Engine.Status.memory`; the chip is hidden while the worker isn't running.
+- `JobToasts` shows each queued or running job as a toast in the shared stack (`toast()`
+  from `@heroui/react`): kept open with its progress and a Cancel button, then updated in
+  place to Done (with Open), Failed or Canceled for a few seconds. A page names a job from
+  the `brief` on its queued event, or from `readActiveJobs` for jobs already active when
+  it rendered.
 
 ### Destructive actions
 
@@ -134,12 +155,19 @@ button positioned over a corner. The button shows on hover or keyboard focus
 (`opacity-0 group-hover:opacity-100 group-focus-within:opacity-100`) and always on touch
 (`pointer-coarse:opacity-100`).
 
-### Files made in the browser
+## Screen size
 
-What the browser can build from what is already on the page is built there, not on the
-server: the sprite sheet (`sprite-sheet.tsx`) is drawn on a canvas and downloaded as a zip
-with its README and a WebM preview. The pieces are in `@/libs/sprite-sheet`
-(`describeSpriteSheet`, `recordPreview`, `saveBlob`) and `@/libs/zip` (`createZip`).
+Frozen runs in a desktop browser window at least **1280px** wide (Tailwind's `xl`), and
+nothing smaller is supported. Below that width the root layout shows `NarrowWindowNotice`
+("Frozen needs a wider window") and a rule at the end of `custom.css` hides every other
+child of `body`, dialogs and toasts included.
+
+- Write each layout once, for 1280px and wider: fixed columns like the studio's
+  `grid-cols-[30rem_minmax(0,1fr)]`, without breakpoint variants. A wide screen gets more
+  room through `max-w-9xl` and flexible columns, not another layout.
+- Don't add `sm:` / `md:` / `lg:` classes, mobile stacking or touch-only layouts. Where a
+  HeroUI example uses `sm:` (a dialog's `sm:max-w-…`), drop the prefix.
+- Check changes at desktop sizes only (the browser pane at 1280px or wider).
 
 ## Theme
 
@@ -147,10 +175,10 @@ with its README and a WebM preview. The pieces are in `@/libs/sprite-sheet`
 
 | Name    | Hex       | Role                                                        |
 | ------- | --------- | ----------------------------------------------------------- |
-| night   | `#131b2b` | Page background; text on accent                             |
-| steel   | `#2f4a63` | Mixed into night for surfaces, borders, default buttons     |
-| glacier | `#5b91a3` | Focus rings, muted text, the **selected** option in a group |
-| frost   | `#cfeae0` | Accent: the primary button, links, the current item's ring  |
+| night   | `#0a0a0a` | Page background; text on accent                             |
+| steel   | `#404040` | Mixed into night for surfaces, borders, default buttons     |
+| glacier | `#a3a3a3` | Focus rings, muted text, the **selected** option in a group |
+| frost   | `#fafafa` | Page text; accent: the primary button, links, current item  |
 
 They are mapped onto HeroUI's tokens (`--background`, `--surface`, `--default`,
 `--accent`, `--muted`, `--border`, `--focus`, …), and HeroUI derives hover and soft
@@ -170,6 +198,6 @@ variants from those. So:
 
 Keyline (`@keyline-icons/react`), covered in [libraries.md](libraries.md#keyline-icons).
 Each mode has its icon, used wherever the mode is named: `ImageSparkles` (image),
-`VideoSparkles` (video), `Scissors` (cutout), `Mic` (voice), `ScanText` (caption, which is
-a page in the header rather than a mode of the studio). A voice clip, which has no
-picture, is shown as `AudioLines`.
+`Scissors` (cutout), `Mic` (voice), `ScanText` (caption, which is a page in the header
+rather than a mode of the studio). A voice clip, which has no picture, is shown as
+`AudioLines`.

@@ -40,6 +40,7 @@ const ENVIRONMENTS = {
     python: TTS.python,
     service: createPythonService({
       name: "voice",
+      label: "Voice · Parler-TTS",
       python: TTS.python,
       script: SERVER_SCRIPT,
       port: TTS.port,
@@ -50,6 +51,7 @@ const ENVIRONMENTS = {
     python: TTS.designPython,
     service: createPythonService({
       name: "voice design",
+      label: "Voice · VoxCPM2, Qwen3-TTS",
       python: TTS.designPython,
       script: SERVER_SCRIPT,
       port: TTS.designPort,

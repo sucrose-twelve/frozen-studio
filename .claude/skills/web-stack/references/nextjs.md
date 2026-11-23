@@ -89,7 +89,7 @@ Only for responses that aren't UI:
 | Route             | What it does                                                                                               |
 | ----------------- | ---------------------------------------------------------------------------------------------------------- |
 | `/api/events`     | Server-Sent Events: relays the Redis channel the worker publishes on. One Redis subscription per open page |
-| `/api/media/[id]` | Serves an asset's file by id, with HTTP Range for video. `?download` sends it as an attachment             |
+| `/api/media/[id]` | Serves an asset's file by id, with HTTP Range for seeking audio. `?download` sends it as an attachment     |
 | `/api/uploads`    | `POST` multipart: stores a reference image (PNG) in ComfyUI's input directory and returns its asset        |
 
 - Validate params with Zod and answer bad input with a bare status (`404`), no body.
@@ -101,8 +101,8 @@ Only for responses that aren't UI:
 
 - `app/layout.tsx` — `<html class='dark' data-theme='dark'>`, the fonts, `NuqsAdapter`,
   `Toaster`.
-- `app/(studio)/layout.tsx` — reads the engine status, mounts the store, the event stream
-  and the header.
+- `app/(studio)/layout.tsx` — reads the engine status and the active jobs, mounts the
+  store, the event stream, the job toasts and the header.
 - `app/error.tsx`, `app/not-found.tsx` — full-page fallbacks in the app's look.
 
 ## Navigation

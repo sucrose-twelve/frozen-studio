@@ -11,16 +11,24 @@ export async function publishEvent(event: Engine.Event) {
 }
 
 /**
- * Puts jobs on the worker's queue, oldest first, and tells the browsers they are waiting.
+ * Puts jobs on the worker's queue, oldest first, and tells the browsers they are waiting, with what each
+ * one is so a page can show it before loading it.
  *
- * @param ids - `jobs.id` of rows already saved with status `queued`
+ * @param jobs - Rows already saved with status `queued`
  */
-export async function enqueueJobs(ids: string[]) {
-  if (ids.length === 0) return
+export async function enqueueJobs(jobs: Engine.JobBrief[]) {
+  if (jobs.length === 0) return
 
   const client = await redis()
-  await client.lPush(REDIS_KEYS.queue, ids)
-  await Promise.all(ids.map((id) => publishEvent({ type: "job", id, status: "queued" })))
+  await client.lPush(
+    REDIS_KEYS.queue,
+    jobs.map((job) => job.id)
+  )
+  await Promise.all(
+    jobs.map((brief) =>
+      publishEvent({ type: "job", id: brief.id, status: "queued", brief })
+    )
+  )
 }
 
 /**

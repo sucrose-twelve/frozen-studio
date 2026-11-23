@@ -32,13 +32,13 @@ export default async function Caption({ searchParams }: NextSearchParams) {
   const job = selected ?? (recent[0] ? await readJob(recent[0].id) : null)
 
   return (
-    <div className='max-w-9xl mx-auto grid grid-cols-1 gap-4 p-4 lg:h-[calc(100svh-4rem)] lg:grid-cols-[30rem_minmax(0,1fr)]'>
+    <div className='max-w-9xl mx-auto grid h-[calc(100svh-4rem)] grid-cols-[30rem_minmax(0,1fr)] gap-4 p-4'>
       <aside className='use-panel flex min-h-0 flex-col overflow-hidden'>
         <div className='min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-4'>
           <CaptionForm isActive />
         </div>
       </aside>
-      <section className='use-panel flex min-h-[70svh] min-w-0 flex-col overflow-hidden lg:min-h-0'>
+      <section className='use-panel flex min-h-0 min-w-0 flex-col overflow-hidden'>
         <JobCanvas key={job?.id ?? "empty"} job={job} assetId={null} />
         <RecentStrip jobs={recent} currentId={job?.id ?? null} />
       </section>

@@ -55,7 +55,7 @@ export const assets = pgTable.withRLS(
   a value needs no migration.
 - `jsonb` columns are typed the same way
   (`params: jsonb("params").$type<Media.JobParams>()`). The union is discriminated on
-  `kind`, so narrow before reading (`if (params.kind === "video")`).
+  `kind`, so narrow before reading (`if (params.kind === "image")`).
 - A setting added to a `…Params` type later is **optional** (`sampler?: … | null`): the
   jobs already in the table don't have it, and no migration fills it in. Read it with a
   fallback (`params.sampler ?? null`), so an old job still opens, rerolls and reuses.

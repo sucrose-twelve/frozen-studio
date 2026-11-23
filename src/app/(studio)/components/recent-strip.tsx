@@ -8,7 +8,6 @@ import {
   ScanText,
   Scissors
 } from "@keyline-icons/react"
-import { Play } from "@keyline-icons/react/fill"
 import Image from "next/image"
 import NextLink from "next/link"
 
@@ -67,10 +66,6 @@ function RecentJob({
         ) : status === "canceled" ? (
           <span className='bg-night/60 text-muted absolute inset-0 grid place-items-center'>
             <CircleSlash size={20} strokeWidth={1.75} />
-          </span>
-        ) : job.kind === "video" ? (
-          <span className='bg-night/70 text-frost absolute right-1 bottom-1 grid size-5 place-items-center rounded-full'>
-            <Play size={10} />
           </span>
         ) : job.kind === "voice" ? (
           <span className='text-glacier absolute inset-0 grid place-items-center'>

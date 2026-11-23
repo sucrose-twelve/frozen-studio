@@ -78,18 +78,18 @@ export function FieldRow({
 
 ## Naming
 
-| Thing                     | Convention                          | Example                                      |
-| ------------------------- | ----------------------------------- | -------------------------------------------- |
-| Components                | PascalCase function                 | `JobCanvas`, `ReferencePicker`               |
-| Page / layout components  | PascalCase, named after the route   | `Studio`, `Gallery`, `StudioLayout`          |
-| Hooks                     | `useX`                              | `useEngine`, `useStudioQuery`                |
-| Server Actions            | verb + noun, camelCase              | `createJob`, `readGallery`, `updateFavorite` |
-| Zod schemas / their types | `xValidator` / `XValidator`         | `imageValidator` / `ImageValidator`          |
-| nuqs caches / their types | `queryValidator` / `QueryValidator` |                                              |
-| Constants                 | SCREAMING_SNAKE_CASE                | `REDIS_KEYS`, `IMAGE_SIZES`                  |
-| Booleans                  | `is` / `has` / `should` prefix      | `isFast`, `hasCutouts`, `shouldSaveFrames`   |
-| Event handlers            | `handleX`                           | `handleSubmit`, `handleReferencesChange`     |
-| DB columns                | camelCase in TS, snake_case in SQL  | `isFavorite: boolean("is_favorite")`         |
+| Thing                     | Convention                          | Example                                           |
+| ------------------------- | ----------------------------------- | ------------------------------------------------- |
+| Components                | PascalCase function                 | `JobCanvas`, `ReferencePicker`                    |
+| Page / layout components  | PascalCase, named after the route   | `Studio`, `Gallery`, `StudioLayout`               |
+| Hooks                     | `useX`                              | `useEngine`, `useStudioQuery`                     |
+| Server Actions            | verb + noun, camelCase              | `createJob`, `readGallery`, `updateFavorite`      |
+| Zod schemas / their types | `xValidator` / `XValidator`         | `imageValidator` / `ImageValidator`               |
+| nuqs caches / their types | `queryValidator` / `QueryValidator` |                                                   |
+| Constants                 | SCREAMING_SNAKE_CASE                | `REDIS_KEYS`, `IMAGE_SIZES`                       |
+| Booleans                  | `is` / `has` / `should` prefix      | `isTurbo`, `hasCutouts`, `shouldRemoveBackground` |
+| Event handlers            | `handleX`                           | `handleSubmit`, `handleReferencesChange`          |
+| DB columns                | camelCase in TS, snake_case in SQL  | `isFavorite: boolean("is_favorite")`              |
 
 ## Exports
 

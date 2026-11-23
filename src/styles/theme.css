@@ -1,27 +1,28 @@
 /**
- * Frozen is dark-only: one cold palette laid over HeroUI's dark theme (`<html class="dark"
+ * Frozen is dark-only: one neutral palette laid over HeroUI's dark theme (`<html class="dark"
  * data-theme="dark">`). HeroUI derives its hover, soft and focus colours from these with `color-mix()`, so
  * only the base tokens are set here.
  *
  * The four palette colours, darkest to lightest:
  *
- *   night #131b2b · steel #2f4a63 · glacier #5b91a3 · frost #cfeae0
+ *   night #0a0a0a · steel #404040 · glacier #a3a3a3 · frost #fafafa
  *
- * Surfaces are night with a little steel mixed in, so each layer sits one step above the one below. Frost is
- * the accent (primary buttons, selection); glacier marks focus and carries muted text.
+ * Night is the page and frost its text. Surfaces are night with a little steel mixed in, so each layer sits
+ * one step above the one below. Frost is the accent (primary buttons, selection); glacier marks focus and is
+ * the muted text.
  */
 :root,
 .dark,
 [data-theme="dark"] {
-  --night: #131b2b;
-  --steel: #2f4a63;
-  --glacier: #5b91a3;
-  --frost: #cfeae0;
+  --night: #0a0a0a;
+  --steel: #404040;
+  --glacier: #a3a3a3;
+  --frost: #fafafa;
 
   --radius: 0.625rem;
 
-  --background: color-mix(in oklab, var(--night) 90%, black);
-  --foreground: color-mix(in oklab, var(--frost) 80%, white);
+  --background: var(--night);
+  --foreground: var(--frost);
 
   --surface: color-mix(in oklab, var(--night) 82%, var(--steel));
   --surface-foreground: var(--foreground);
@@ -33,7 +34,7 @@
   --overlay: color-mix(in oklab, var(--night) 72%, var(--steel));
   --overlay-foreground: var(--foreground);
 
-  --muted: color-mix(in oklab, var(--glacier) 76%, var(--frost));
+  --muted: var(--glacier);
 
   --default: color-mix(in oklab, var(--night) 42%, var(--steel));
   --default-foreground: var(--foreground);
@@ -62,7 +63,7 @@
   --danger: #f0717b;
   --danger-foreground: #ffffff;
 
-  --backdrop: rgb(8 12 20 / 0.72);
+  --backdrop: rgb(0 0 0 / 0.72);
   --tooltip-delay: 400ms;
   --tooltip-close-delay: 100ms;
 }

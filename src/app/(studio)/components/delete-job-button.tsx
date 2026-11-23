@@ -64,7 +64,7 @@ export function DeleteJobButton({
 
       <AlertDialog.Backdrop isOpen={dialog.isOpen} onOpenChange={dialog.setOpen}>
         <AlertDialog.Container>
-          <AlertDialog.Dialog className='sm:max-w-[400px]'>
+          <AlertDialog.Dialog className='max-w-[400px]'>
             <AlertDialog.Header>
               <AlertDialog.Icon status='danger' />
               <AlertDialog.Heading>Delete this job?</AlertDialog.Heading>

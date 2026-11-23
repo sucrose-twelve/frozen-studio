@@ -15,12 +15,9 @@ import {
 import type { BuiltGraph, GraphOutput } from "@/libs/comfy/graphs/builder"
 import { buildCutoutGraph } from "@/libs/comfy/graphs/cutout"
 import { buildImageGraph } from "@/libs/comfy/graphs/image"
-import { buildVideoGraph } from "@/libs/comfy/graphs/video"
 import { imageEngine } from "@/libs/image-model"
 import { assetFilePath, comfyImageName, mimeTypeOf, readPngFileSize } from "@/libs/media"
 import { publishEvent } from "@/libs/queue"
-import { videoFamily } from "@/libs/video-model"
-import { aspectRatioOf, videoSize } from "@/libs/video-plan"
 
 import { runCaptionJob } from "./caption"
 import { clientId, watchPrompt } from "./comfy-socket"
@@ -42,11 +39,6 @@ export type RunControl = {
   isCanceled: boolean
 }
 
-type Size = {
-  width: number
-  height: number
-}
-
 /**
  * Whether a job runs on ComfyUI, and so has to wait for it to be up. Voice and caption jobs have services
  * of their own, and an image job with a GGUF text encoder runs on stable-diffusion.cpp.
@@ -57,8 +49,8 @@ export function runsOnComfy(params: Media.JobParams) {
 }
 
 /**
- * The files a save node reported. `SaveImage` lists them under `images`; the video nodes use the same shape
- * under their own key, so any list of `{ filename }` counts.
+ * The files a save node reported. `SaveImage` lists them under `images`; any list of `{ filename }` under
+ * any key counts, so other save nodes are read the same way.
  */
 function filesOf(nodeOutput: Record<string, unknown> | undefined) {
   if (!nodeOutput) return []
@@ -73,15 +65,13 @@ function filesOf(nodeOutput: Record<string, unknown> | undefined) {
 }
 
 /**
- * Turns the files ComfyUI wrote into asset rows, in the order the save nodes listed them.
- *
- * @param videoSize - The frame size of the job's video; images are measured from their PNG header
+ * Turns the files ComfyUI wrote into asset rows, in the order the save nodes listed them. Every one is a
+ * PNG, measured from its header.
  */
 async function collectAssets(
   jobId: string,
   outputs: GraphOutput[],
-  history: ComfyHistory,
-  videoSize: Size | null
+  history: ComfyHistory
 ) {
   const rows: AssetInsertValues[] = []
 
@@ -96,7 +86,7 @@ async function collectAssets(
       if (!filePath) continue
 
       const stats = await fs.promises.stat(filePath)
-      const size = output.kind === "image" ? await readPngFileSize(filePath) : videoSize
+      const size = await readPngFileSize(filePath)
 
       rows.push({
         jobId,
@@ -137,7 +127,7 @@ export async function processJob(job: Job, control: RunControl) {
   await claimGpu("comfy")
 
   const inputs = await db
-    .select(pick(assetColumns, ["id", "root", "path", "width", "height"]))
+    .select(pick(assetColumns, ["id", "root", "path"]))
     .from(schema.jobInputs)
     .innerJoin(schema.assets, eq(schema.assets.id, schema.jobInputs.assetId))
     .where(eq(schema.jobInputs.jobId, job.id))
@@ -146,7 +136,6 @@ export async function processJob(job: Job, control: RunControl) {
   const models = await currentModels()
 
   let built: BuiltGraph
-  let frameSize: Size | null = null
 
   switch (job.params.kind) {
     case "image":
@@ -158,27 +147,6 @@ export async function processJob(job: Job, control: RunControl) {
         models
       })
       break
-    case "video": {
-      const first = inputs[0]
-      const aspectRatio = first
-        ? first.width / first.height
-        : aspectRatioOf(job.params.aspect)
-
-      frameSize = videoSize(
-        job.params.resolution,
-        aspectRatio,
-        videoFamily(job.params.model)
-      )
-      built = buildVideoGraph({
-        jobId: job.id,
-        prompt: job.prompt,
-        params: job.params,
-        references,
-        aspectRatio,
-        models
-      })
-      break
-    }
     case "cutout": {
       const [reference] = references
       if (!reference) throw new Error("A cutout job needs an image")
@@ -210,7 +178,7 @@ export async function processJob(job: Job, control: RunControl) {
     }
   )
 
-  const assets = await collectAssets(job.id, built.outputs, history, frameSize)
+  const assets = await collectAssets(job.id, built.outputs, history)
   if (assets.length === 0) throw new Error("ComfyUI finished without writing any files")
 
   await db.insert(schema.assets).values(assets)

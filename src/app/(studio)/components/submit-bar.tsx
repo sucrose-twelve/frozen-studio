@@ -34,7 +34,7 @@ export function SubmitBar({
         isDisabled={!!blocker}>
         {icon}
         {label}
-        <Kbd className='bg-night/15 text-night ml-1 hidden sm:inline-flex'>
+        <Kbd className='bg-night/15 text-night ml-1'>
           <Kbd.Abbr keyValue='ctrl' />
           <Kbd.Content>↵</Kbd.Content>
         </Kbd>

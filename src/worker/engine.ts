@@ -1,4 +1,8 @@
+import { sql } from "drizzle-orm"
+
 import { ENGINE_HEARTBEAT_MS, REDIS_KEYS } from "@/constants"
+import { COMFY, DB, REDIS } from "@/constants/env"
+import { db } from "@/drizzle"
 import { isComfyOnline } from "@/libs/comfy/client"
 import { discoverModels, type ComfyModels } from "@/libs/comfy/discover"
 import { logger } from "@/libs/logger"
@@ -7,10 +11,18 @@ import { redis } from "@/libs/redis"
 
 import { findCaptionModels } from "./caption"
 import { readVramUsers } from "./gpu"
+import { readMemory } from "./memory"
 import { withSdCppModels } from "./sdcpp"
+import { describeServices } from "./service"
 import { findVoiceModels } from "./voice"
 
-const NO_COMFY_MODELS: ComfyModels = { image: null, video: null, cutout: null }
+/**
+ * How long Postgres gets to answer the status check. A database that is down can leave a connection
+ * attempt hanging for far longer, which would hold up every beat behind it.
+ */
+const DATABASE_CHECK_MS = 1_500
+
+const NO_COMFY_MODELS: ComfyModels = { image: null, cutout: null }
 
 /**
  * Model files change rarely (a download, a delete), and the VRAM counter costs a PowerShell start: both are
@@ -72,6 +84,44 @@ function allModels(): Engine.Models {
   }
 }
 
+async function isDatabaseOnline() {
+  const timeout = new Promise<false>((resolve) =>
+    setTimeout(() => resolve(false), DATABASE_CHECK_MS)
+  )
+  const check = db
+    .execute(sql`select 1`)
+    .then(() => true)
+    .catch(() => false)
+
+  return Promise.race([check, timeout])
+}
+
+/**
+ * The programs the header lists, as of this beat. Redis is online by definition: this status only reaches
+ * a browser through it.
+ */
+async function describeAll(): Promise<Engine.Service[]> {
+  const [isDatabaseUp, pythonServices] = await Promise.all([
+    isDatabaseOnline(),
+    describeServices()
+  ])
+
+  return [
+    {
+      name: "ComfyUI",
+      state: state.isComfyOnline ? "online" : "offline",
+      address: new URL(COMFY.url).host
+    },
+    {
+      name: "Postgres",
+      state: isDatabaseUp ? "online" : "offline",
+      address: `${DB.host}:${DB.port}`
+    },
+    { name: "Redis", state: "online", address: `${REDIS.host}:${REDIS.port}` },
+    ...pythonServices
+  ]
+}
+
 /**
  * Checks ComfyUI and writes the worker's status to Redis. Called on a timer, and directly whenever the
  * running job changes so the browsers hear about it at once.
@@ -96,11 +146,17 @@ export async function reportEngine() {
     state.vramUsers = await readVramUsers()
   }
 
-  const client = await redis()
+  const [client, services, memory] = await Promise.all([
+    redis(),
+    describeAll(),
+    readMemory()
+  ])
   await writeEngineStatus({
     isComfyOnline: state.isComfyOnline,
     models: allModels(),
     vramUsers: state.vramUsers,
+    services,
+    memory,
     runningJobId: state.runningJobId,
     queued: await client.lLen(REDIS_KEYS.queue),
     updatedAt: now

@@ -11,6 +11,10 @@ type ServiceOptions = {
    */
   name: string
   /**
+   * What the header's status list calls it: "Voice · Parler-TTS".
+   */
+  label: string
+  /**
    * The Python interpreter of the service's environment and its script, relative to the project root.
    */
   python: string
@@ -48,6 +52,7 @@ export type PythonService = {
   stop: () => void
   unload: () => Promise<boolean>
   stream: <TEvent>(route: string, body: unknown) => AsyncGenerator<TEvent>
+  describe: () => Promise<Engine.Service>
 }
 
 const services: PythonService[] = []
@@ -201,9 +206,27 @@ export function createPythonService(options: ServiceOptions): PythonService {
     }
   }
 
-  const service: PythonService = { start, stop, unload, stream }
+  /**
+   * The service as the header lists it. One that isn't answering is on standby, not offline: the worker
+   * starts it when a job needs it.
+   */
+  async function describe(): Promise<Engine.Service> {
+    const health = await readHealth()
+    const state = !health ? "standby" : health.loaded ? "loaded" : "online"
+
+    return { name: options.label, state, address: `127.0.0.1:${options.port}` }
+  }
+
+  const service: PythonService = { start, stop, unload, stream, describe }
   services.push(service)
   return service
+}
+
+/**
+ * Every Python service, as the header lists them.
+ */
+export function describeServices() {
+  return Promise.all(services.map((service) => service.describe()))
 }
 
 /**

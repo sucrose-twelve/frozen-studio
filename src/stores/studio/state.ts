@@ -5,15 +5,19 @@ import type { AssetView, JobDetail } from "@/actions/jobs/read"
 /**
  * What the event stream has said about a job since the page rendered. `status` is unset until a status event
  * arrives, in which case the status the server rendered still stands.
+ *
+ * `brief` names the job for its toast: it comes with the queued event, or from the server for a job that
+ * was already active when the page rendered.
  */
 export type JobLive = {
   status?: Media.JobStatus
   error?: string
   progress: Engine.Progress | null
+  brief?: Engine.JobBrief
 }
 
 /**
- * A request to fill a form from a result: "use as reference", "animate", "reuse settings". The form of that
+ * A request to fill a form from a result: "use as reference", "describe", "reuse settings". The form of that
  * `kind` applies it once; a new object means a new request.
  *
  * - `references`: images to put in the form's reference slots
@@ -42,10 +46,9 @@ type Actions = {
 
 export type StudioState = State & Actions
 
-export const createStudioStore = (initialState: Pick<State, "engine">) =>
+export const createStudioStore = (initialState: Pick<State, "engine" | "jobs">) =>
   createStore<StudioState>()((setState) => ({
     ...initialState,
-    jobs: {},
     prefill: null,
     requestPrefill: (prefill) => setState({ prefill }),
     applyEvent: (event) =>
@@ -57,7 +60,12 @@ export const createStudioStore = (initialState: Pick<State, "engine">) =>
             return {
               jobs: {
                 ...state.jobs,
-                [event.id]: { status: event.status, error: event.error, progress: null }
+                [event.id]: {
+                  status: event.status,
+                  error: event.error,
+                  progress: null,
+                  brief: event.brief ?? state.jobs[event.id]?.brief
+                }
               }
             }
           case "progress":

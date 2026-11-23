@@ -1,5 +1,5 @@
 declare namespace Media {
-  export type JobKind = "image" | "video" | "cutout" | "voice" | "caption"
+  export type JobKind = "image" | "cutout" | "voice" | "caption"
 
   /**
    * The kinds whose forms share the studio page. A caption job has a page of its own.
@@ -8,7 +8,7 @@ declare namespace Media {
 
   export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "canceled"
 
-  export type AssetKind = "image" | "video" | "audio"
+  export type AssetKind = "image" | "audio"
 
   /**
    * What the gallery shows at a time: one kind of result, or the cutouts, which are images but are kept
@@ -20,12 +20,10 @@ declare namespace Media {
    * What an asset is to its job:
    *
    * - `upload`: a reference image the user added (no job made it)
-   * - `output`: the result itself: an image, a video, or one spoken line
+   * - `output`: the result itself: an image, or one spoken line
    * - `cutout`: an image with its background removed (transparent PNG)
-   * - `frame`: one frame of a video, kept for sprite sheets
-   * - `still`: the first frame a text-to-video job drew before animating it
    */
-  export type AssetRole = "upload" | "output" | "cutout" | "frame" | "still"
+  export type AssetRole = "upload" | "output" | "cutout"
 
   /**
    * Which ComfyUI directory `assets.path` is relative to.
@@ -51,14 +49,6 @@ declare namespace Media {
    * Samplers offered for image jobs, by the names ComfyUI gives them.
    */
   export type ImageSampler = "euler_ancestral" | "euler" | "dpmpp_2m" | "er_sde"
-
-  export type VideoResolution = 480 | 720
-
-  /**
-   * The model families the Video form can run: Wan 2.2 (a pair of files per model) and LTX 2.5 (one file).
-   * Which one a model belongs to is read from its name (`videoFamily`).
-   */
-  export type VideoFamily = "wan" | "ltx"
 
   export type ImageParams = {
     kind: "image"
@@ -90,40 +80,6 @@ declare namespace Media {
      */
     lora?: { name: string; strength: number } | null
     seed: number
-    shouldRemoveBackground: boolean
-  }
-
-  export type VideoParams = {
-    kind: "video"
-    /**
-     * Which model runs the job: the name of a pair of Wan files (`Engine.VideoModel.name`) or an LTX file.
-     * Its family (`videoFamily`) decides the frame rate. Jobs from before there was a choice have none, and
-     * run on the first Wan pair installed.
-     */
-    model?: string
-    seconds: number
-    resolution: VideoResolution
-    /**
-     * Used when there is no reference image; otherwise the first reference decides the shape.
-     */
-    aspect: Aspect
-    /**
-     * The image model that draws the first frame of a text-to-video job on Wan. `null` with references,
-     * and on LTX, which makes a video from text alone.
-     */
-    imageModel: string | null
-    isStaticCamera: boolean
-    isLoop: boolean
-    isFast: boolean
-    steps: number
-    cfg: number
-    /**
-     * What to keep out of the video, on top of the list Wan always gets (`WAN_NEGATIVE_PROMPT`). Without
-     * effect in fast mode and on LTX, which run at CFG 1. Jobs from before the option existed have no value.
-     */
-    negative?: string
-    seed: number
-    shouldSaveFrames: boolean
     shouldRemoveBackground: boolean
   }
 
@@ -164,7 +120,7 @@ declare namespace Media {
   export type CaptionMode = "prompts" | "answer"
 
   /**
-   * How a caption job writes its positive prompt: a paragraph (what Qwen-Image and Wan read best) or a
+   * How a caption job writes its positive prompt: a paragraph (what Qwen-Image reads best) or a
    * list of tags.
    */
   export type CaptionStyle = "prose" | "tags"
@@ -185,8 +141,7 @@ declare namespace Media {
     style: CaptionStyle
   }
 
-  export type JobParams =
-    ImageParams | VideoParams | CutoutParams | VoiceParams | CaptionParams
+  export type JobParams = ImageParams | CutoutParams | VoiceParams | CaptionParams
 
   /**
    * What a caption job wrote. It is text, not a file, so it is kept on the job (`jobs.result`) instead of
@@ -214,10 +169,6 @@ declare namespace Engine {
      * The families that have everything they need, each with at least one model. `null` when none has.
      */
     image: Partial<Record<Media.ImageFamily, ImageModels>> | null
-    /**
-     * The video families, each `null` until it has everything it needs. `null` when neither has.
-     */
-    video: { wan: WanModels | null; ltx: LtxModels | null } | null
     cutout: { model: string } | null
     voice: { models: string[] } | null
     caption: { models: string[] } | null
@@ -241,39 +192,6 @@ declare namespace Engine {
   }
 
   /**
-   * Wan 2.2 comes as two files that work in turn: the high-noise model lays out the motion, the low-noise
-   * model draws the detail. One pair is one choice in the Video form, named after what the two file names
-   * share.
-   */
-  export type VideoModel = {
-    name: string
-    highNoise: string
-    lowNoise: string
-  }
-
-  /**
-   * What Wan 2.2 has installed: at least one pair, the umT5 text encoder and the VAE. The Lightning LoRAs
-   * are optional and switch on the fast mode.
-   */
-  export type WanModels = {
-    models: VideoModel[]
-    textEncoder: string
-    vae: string
-    fastHighNoise: string | null
-    fastLowNoise: string | null
-  }
-
-  /**
-   * What LTX 2.5 has installed: at least one model file (each is one choice in the Video form, under its
-   * file name), the Gemma text encoder made for it, and its video VAE.
-   */
-  export type LtxModels = {
-    models: string[]
-    textEncoder: string
-    vae: string
-  }
-
-  /**
    * Another program holding VRAM, e.g. a game. ComfyUI can't see it on Windows and overfills the card.
    */
   export type VramUser = {
@@ -282,15 +200,67 @@ declare namespace Engine {
   }
 
   /**
+   * How a program the worker depends on is doing:
+   *
+   * - `online`: it answers
+   * - `loaded`: a Python service that answers and holds its model in VRAM
+   * - `standby`: a Python service that isn't running; the worker starts it for the first job that needs it
+   * - `offline`: it should answer and doesn't
+   */
+  export type ServiceState = "online" | "loaded" | "standby" | "offline"
+
+  /**
+   * One program in the header's status list, as the worker last saw it.
+   */
+  export type Service = {
+    name: string
+    state: ServiceState
+    /**
+     * Where it listens, e.g. `127.0.0.1:8188`.
+     */
+    address: string
+  }
+
+  /**
+   * How much of a memory is taken, in bytes.
+   */
+  export type MemoryUsage = {
+    used: number
+    total: number
+  }
+
+  /**
+   * The machine's memory as the worker last read it. `vram` is `null` when `nvidia-smi` can't be run.
+   */
+  export type Memory = {
+    ram: MemoryUsage
+    vram: MemoryUsage | null
+  }
+
+  /**
    * What the worker writes to Redis every few seconds. A missing key means the worker isn't running.
+   *
+   * `services` are the programs the worker reached on its last check: ComfyUI, Postgres, Redis and the
+   * Python services.
    */
   export type Status = {
     isComfyOnline: boolean
     models: Models
     vramUsers: VramUser[]
+    services: Service[]
+    memory: Memory
     runningJobId: string | null
     queued: number
     updatedAt: number
+  }
+
+  /**
+   * What a browser needs to name a job before it has loaded the job itself.
+   */
+  export type JobBrief = {
+    id: string
+    kind: Media.JobKind
+    prompt: string
   }
 
   export type Progress = {
@@ -303,7 +273,16 @@ declare namespace Engine {
    * What `/api/events` streams to the browser.
    */
   export type Event =
-    | { type: "job"; id: string; status: Media.JobStatus; error?: string }
+    | {
+        type: "job"
+        id: string
+        status: Media.JobStatus
+        error?: string
+        /**
+         * Sent with `queued`, so a page can name a job it has never loaded.
+         */
+        brief?: JobBrief
+      }
     | ({ type: "progress"; id: string } & Progress)
     | { type: "engine"; engine: Status }
 

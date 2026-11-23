@@ -77,7 +77,7 @@ export function JobCanvas({
         title='Nothing here yet'>
         <p className='text-muted text-sm'>
           Fill in the form on the left and run it. Results land here, and the ones that
-          are pictures, videos or sound stay in the gallery.
+          are pictures or sound stay in the gallery.
         </p>
       </Notice>
     )

@@ -17,8 +17,8 @@ const CACHE_CONTROL = "private, max-age=31536000, immutable"
 const paramValidator = z.object({ id: z.uuid() })
 
 /**
- * Resolves a `Range` header to an inclusive byte range, capping open-ended ranges at `MAX_CHUNK` so a video
- * is sent as it plays. A suffix range (`bytes=-500`) means the last N bytes.
+ * Resolves a `Range` header to an inclusive byte range, capping open-ended ranges at `MAX_CHUNK` so a long
+ * file is sent as it plays. A suffix range (`bytes=-500`) means the last N bytes.
  */
 function parseRange(header: string, size: number) {
   const match = /^bytes=(\d*)-(\d*)$/.exec(header)
@@ -34,7 +34,8 @@ function parseRange(header: string, size: number) {
 }
 
 /**
- * Serves an asset's file by id: images whole, videos with HTTP Range so they can seek. `?download` sends it
+ * Serves an asset's file by id, whole, or in part when the browser asks for a range (an audio player
+ * seeking does). `?download` sends it
  * as an attachment under its file name.
  */
 export async function GET(request: NextRequest, ctx: RouteContext<"/api/media/[id]">) {

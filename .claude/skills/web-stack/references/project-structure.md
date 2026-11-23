@@ -39,11 +39,11 @@ src/
 │   ├── (studio)/         The app's one route group: / (studio), /caption and /gallery
 │   ├── api/              Route Handlers for non-UI responses: events (SSE), media/[id], uploads
 │   └── error.tsx, not-found.tsx, layout.tsx
-├── components/           Shared UI used by 2+ routes or by the layout (site-header, engine-status, job-events)
+├── components/           Shared UI used by 2+ routes or by the layout (site-header, engine-status, job-events, job-toasts)
 ├── constants/            Value lists + labels (media.ts), Redis keys and engine settings (engine.ts), metadata, fonts; env/
 ├── drizzle/              db client, schema/*.schema.ts, relations, types, table-columns, migrations, utils
 ├── hooks/                Shared client hooks, re-exported from hooks/index.ts
-├── libs/                 Framework-agnostic helpers: queue, redis, media, job, video-plan, upload, sprite-sheet, zip, logger, utils
+├── libs/                 Framework-agnostic helpers: queue, redis, media, job, image-model, upload, logger, utils
 │   └── comfy/            ComfyUI HTTP client, model discovery, graphs/ (one workflow builder per job kind)
 ├── stores/<name>/        zustand store: state.ts (createXStore) + index.tsx (Provider + hook)
 ├── styles/               globals.css, theme.css (palette + HeroUI tokens), custom.css (@layer components)
@@ -75,7 +75,7 @@ app/(studio)/gallery/
 ```
 
 The studio page keeps the item it shows in search params rather than in a segment:
-`/?mode=video&job=<id>&asset=<id>`.
+`/?mode=image&job=<id>&asset=<id>`.
 
 ## Local vs shared — where does it go?
 
@@ -90,7 +90,7 @@ don't copy it. Anything the **worker** also needs is shared by definition and go
 `@/libs` or `@/constants`.
 
 **Exception: value lists and their labels.** A fixed set of values (`JOB_KINDS`,
-`ASPECTS`, `VIDEO_SECONDS`) and everything keyed by it (`JOB_KIND_LABELS`, `IMAGE_SIZES`)
+`ASPECTS`, `IMAGE_COUNTS`) and everything keyed by it (`JOB_KIND_LABELS`, `IMAGE_SIZES`)
 live together in `constants/<domain>.ts` and are imported from `@/constants`, even when
 one route uses them. Validators import the list; they don't define it. Icon maps and
 option lists built for one control stay with the component that renders them.
@@ -110,7 +110,7 @@ Shared actions are grouped by domain and split into the four CRUD files: `read.t
 
 | Kind              | Convention                    | Example                                 |
 | ----------------- | ----------------------------- | --------------------------------------- |
-| Files and folders | kebab-case                    | `job-canvas.tsx`, `video-plan.ts`       |
+| Files and folders | kebab-case                    | `job-canvas.tsx`, `image-model.ts`      |
 | Hook files        | kebab-case with `use-` prefix | `use-engine.ts`, `use-studio-query.ts`  |
 | Validators        | `validator.<lib>.ts`          | `validator.zod.ts`, `validator.nuqs.ts` |
 | Drizzle schema    | `<domain>.schema.ts`          | `jobs.schema.ts`                        |

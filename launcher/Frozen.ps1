@@ -60,10 +60,10 @@ function New-FrozenBitmap([int]$Size) {
     $square.AddArc($far, $far, $corner, $corner, 0, 90)
     $square.AddArc(0, $far, $corner, $corner, 90, 90)
     $square.CloseFigure()
-    $night = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml('#131b2b'))
+    $night = New-Object System.Drawing.SolidBrush([System.Drawing.ColorTranslator]::FromHtml('#0a0a0a'))
     $graphics.FillPath($night, $square)
 
-    $pen = New-Object System.Drawing.Pen([System.Drawing.ColorTranslator]::FromHtml('#cfeae0'), [float](2 * $unit))
+    $pen = New-Object System.Drawing.Pen([System.Drawing.ColorTranslator]::FromHtml('#fafafa'), [float](2 * $unit))
     $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
     $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
     $pen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
@@ -383,7 +383,7 @@ if (-not (Test-Url "$comfyUrl/system_stats")) {
 
         $script:started['comfyui'] = Start-Hidden 'comfyui' $python $comfyArgs $comfyDir
     } catch {
-        Show-Error "ComfyUI could not be started.`n`n$($_.Exception.Message)`n`nFrozen will open without it; image and video jobs wait until ComfyUI runs."
+        Show-Error "ComfyUI could not be started.`n`n$($_.Exception.Message)`n`nFrozen will open without it; image and cutout jobs wait until ComfyUI runs."
     }
 }
 
@@ -524,7 +524,7 @@ $timer.add_Tick({
     if (-not $script:isAppReady -and (Test-Url $AppUrl)) {
         $script:isAppReady = $true
         $message = 'Ready. Right-click this icon to quit.'
-        if (-not $script:isComfyReady) { $message = 'Ready. ComfyUI is still loading; image and video jobs wait for it.' }
+        if (-not $script:isComfyReady) { $message = 'Ready. ComfyUI is still loading; image and cutout jobs wait for it.' }
         if ($script:notes.Count -gt 0) { $message = "$message $($script:notes -join ' ')" }
         $tray.ShowBalloonTip(6000, 'Frozen', $message, [System.Windows.Forms.ToolTipIcon]::Info)
         if (-not $script:hasOpened) {

@@ -1,15 +1,14 @@
 ---
 name: web-stack
 description:
-  Project rules for Frozen, a local media studio (a web UI that generates images, videos
-  and voice lines through ComfyUI and a text-to-speech service). Load before writing,
-  editing, reviewing, or formatting any .ts/.tsx/.css file, before running install or
-  database commands, and before designing a feature — even when the request names no
-  library (e.g. "add an audio mode", "add a setting to the video form", "show the queue").
-  Covers the stack (Next.js 16 with Cache Components, React 19, HeroUI v3, Tailwind v4,
-  Keyline icons, Drizzle ORM + Postgres, Redis queue, Zod v4, nuqs, react-hook-form,
-  zustand), folder layout, UI components, coding style, and the queue / worker / ComfyUI
-  engine.
+  Project rules for Frozen, a local media studio (a web UI that generates images and voice
+  lines through ComfyUI and a text-to-speech service). Load before writing, editing,
+  reviewing, or formatting any .ts/.tsx/.css file, before running install or database
+  commands, and before designing a feature — even when the request names no library (e.g.
+  "add an audio mode", "add a setting to the image form", "show the queue"). Covers the
+  stack (Next.js 16 with Cache Components, React 19, HeroUI v3, Tailwind v4, Keyline
+  icons, Drizzle ORM + Postgres, Redis queue, Zod v4, nuqs, react-hook-form, zustand),
+  folder layout, UI components, coding style, and the queue / worker / ComfyUI engine.
 ---
 
 # Web Stack — Project Frozen
@@ -113,9 +112,13 @@ in `node_modules/@heroui/styles/dist/components/`.
   `tests/` folder is the **scripts** folder (it keeps that name): bun scripts like
   `tests/status.spec.ts`. See
   [project-structure.md](references/project-structure.md#repo-root).
-- **The UI is in English**, dark-only, on a four-colour cold palette. See
+- **The UI is in English**, dark-only, on a four-colour neutral palette. See
   [ui-components.md](references/ui-components.md#theme).
 - **No sign-in and no accounts.** Don't add auth unless the owner asks.
+- **Desktop only, 1280px wide and up.** A narrower window shows a notice instead of the
+  app. Lay pages out for that width alone: no `sm:` / `md:` / `lg:` variants, no stacked
+  phone layouts, and no checking at tablet or phone sizes. See
+  [ui-components.md](references/ui-components.md#screen-size).
 - **Test with neutral prompts.** What the models do with other subject matter is the
   owner's to try.
 - **Downloads need the owner's go-ahead** (models, Python packages): say what, from where,

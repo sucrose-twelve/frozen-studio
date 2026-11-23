@@ -6,14 +6,18 @@ import { COMFY } from "@/constants/env"
 
 import { EngineStatus } from "./engine-status"
 import { HeaderNav } from "./header-nav"
+import { MemoryStatus } from "./memory-status"
 
 /**
  * The bar across the top of every page: brand, the sections, and the engine's status.
+ *
+ * It is exactly `h-16` with its border inside, since the studio pages fill the rest of the window with
+ * `h-[calc(100svh-4rem)]`: a border on top of the height made them a pixel too tall, and the page scrolled.
  */
 export function SiteHeader() {
   return (
-    <header className='border-separator bg-background/85 sticky top-0 z-40 border-b backdrop-blur'>
-      <div className='max-w-9xl mx-auto flex h-16 items-center gap-6 px-5'>
+    <header className='border-separator bg-background/85 sticky top-0 z-40 h-16 border-b backdrop-blur'>
+      <div className='max-w-9xl mx-auto flex h-full items-center gap-6 px-5'>
         <NextLink href='/' className='flex items-center gap-3'>
           <span className='bg-accent text-accent-foreground grid size-9 place-items-center rounded-xl'>
             <Snowflake size={20} strokeWidth={1.75} />
@@ -31,6 +35,7 @@ export function SiteHeader() {
         <HeaderNav />
 
         <div className='ml-auto flex items-center gap-3'>
+          <MemoryStatus />
           <EngineStatus />
           <a
             href={COMFY.url}

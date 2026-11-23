@@ -1,10 +1,10 @@
 import { and, asc, count, desc, eq, inArray, ne } from "drizzle-orm"
 import { groupBy, pick } from "es-toolkit"
 
-import { GALLERY_PAGE_SIZE, RECENT_JOBS } from "@/constants"
+import { ACTIVE_JOB_STATUSES, GALLERY_PAGE_SIZE, RECENT_JOBS } from "@/constants"
 import { db, schema } from "@/drizzle"
 import { assetColumns, jobColumns } from "@/drizzle/table-columns"
-import { lastPageOf, toPagination, withPagination } from "@/drizzle/utils"
+import { lastPageOf, toPagination } from "@/drizzle/utils"
 import { scriptLines } from "@/libs/job"
 import { assetFileName } from "@/libs/media"
 
@@ -30,7 +30,7 @@ export type JobSummary = {
   prompt: string
   createdAt: number
   /**
-   * An image that stands for the job in lists: its first result, or for a video the frame it starts on.
+   * An image that stands for the job in lists: its first result, or the reference it started from.
    */
   cover: AssetView | null
 }
@@ -52,8 +52,6 @@ export type JobDetail = {
   inputs: AssetView[]
   outputs: AssetView[]
   cutouts: AssetView[]
-  frames: AssetView[]
-  still: AssetView | null
 }
 
 export type GalleryItem = {
@@ -65,13 +63,14 @@ export type GalleryItem = {
    */
   prompt: string
   /**
-   * For a video, the image to show before it plays.
-   */
-  poster: AssetView | null
-  /**
    * How many results of the same job the gallery holds, this one included. Deleting the job takes them all.
    */
   jobResults: number
+  /**
+   * How many pictures the viewer pages through from this one: the job's results of the same role (its
+   * outputs, or its cutouts), this one included.
+   */
+  setSize: number
 }
 
 const assetViewColumns = pick(assetColumns, [
@@ -126,16 +125,15 @@ function coverOf(assets: AssetRow[], firstInput: AssetView | undefined) {
     .toSorted((a, b) => a.position - b.position)
   const own =
     images.find((asset) => asset.role === "output") ??
-    images.find((asset) => asset.role === "cutout") ??
-    images.find((asset) => asset.role === "still")
+    images.find((asset) => asset.role === "cutout")
 
   return own ? toAssetView(own) : (firstInput ?? null)
 }
 
 /**
- * Assets that can stand for a job in a list: everything but video frames and uploads.
+ * Assets that can stand for a job in a list: everything but uploads.
  */
-const COVER_ROLES: Media.AssetRole[] = ["output", "cutout", "still"]
+const COVER_ROLES: Media.AssetRole[] = ["output", "cutout"]
 
 /**
  * Assets the gallery shows: the results themselves, and their cutouts.
@@ -184,6 +182,19 @@ export async function readRecentJobs(
   }))
 }
 
+export type ActiveJob = Engine.JobBrief & { status: Media.JobStatus }
+
+/**
+ * Every job the worker still has to finish, oldest first: the job toasts a page opens with.
+ */
+export async function readActiveJobs(): Promise<ActiveJob[]> {
+  return db
+    .select(pick(jobColumns, ["id", "kind", "status", "prompt"]))
+    .from(schema.jobs)
+    .where(inArray(schema.jobs.status, [...ACTIVE_JOB_STATUSES]))
+    .orderBy(asc(schema.jobs.createdAt))
+}
+
 /**
  * One job with everything it used and produced.
  */
@@ -219,10 +230,22 @@ export async function readJob(id: string): Promise<JobDetail | null> {
     finishedAt: job.finishedAt?.getTime() ?? null,
     inputs: inputs.map((row) => toAssetView(row.asset)),
     outputs: byRole.output ?? [],
-    cutouts: byRole.cutout ?? [],
-    frames: byRole.frame ?? [],
-    still: byRole.still?.[0] ?? null
+    cutouts: byRole.cutout ?? []
   }
+}
+
+/**
+ * The job that made an asset, with everything it used and produced; `null` for an upload or an asset that
+ * is gone. The gallery opens a result this way, knowing only the result.
+ */
+export async function readAssetJob(assetId: string): Promise<JobDetail | null> {
+  const [asset] = await db
+    .select({ jobId: schema.assets.jobId })
+    .from(schema.assets)
+    .where(eq(schema.assets.id, assetId))
+    .limit(1)
+
+  return asset?.jobId ? readJob(asset.jobId) : null
 }
 
 /**
@@ -242,9 +265,12 @@ export async function readAssets(ids: string[]): Promise<AssetView[]> {
 }
 
 /**
- * One page of finished results of one kind, newest first.
+ * Finished results of one kind, newest first: every page up to `query.page`, for a gallery that loads the
+ * next page as it is scrolled. Rendering them all again on each load (rather than appending on the client)
+ * keeps `router.refresh()` working: a deleted job or a new result shows without the pages drifting apart.
+ * `currentPage` is the last page loaded, `nextPage` whether there is another.
  *
- * @param query.kind - Images, videos or voice clips, or `"cutout"`: the transparent copies, whichever kind
+ * @param query.kind - Images or voice clips, or `"cutout"`: the transparent copies, whichever kind
  *   of job made them. They are images too, and are left out of `"image"` so each shows once
  * @param query.favorites - Only favorites
  */
@@ -267,29 +293,26 @@ export async function readGallery(query: {
     .where(filter)
   const page = Math.min(Math.max(1, query.page), lastPageOf(total, GALLERY_PAGE_SIZE))
 
-  const rows = await withPagination(
-    db
-      .select({
-        asset: assetViewColumns,
-        job: pick(jobColumns, ["id", "kind", "prompt"])
-      })
-      .from(schema.assets)
-      .innerJoin(schema.jobs, eq(schema.jobs.id, schema.assets.jobId))
-      .where(filter)
-      .orderBy(desc(schema.assets.createdAt), asc(schema.assets.position))
-      .$dynamic(),
-    page,
-    GALLERY_PAGE_SIZE
-  )
+  const rows = await db
+    .select({
+      asset: assetViewColumns,
+      job: pick(jobColumns, ["id", "kind", "prompt"])
+    })
+    .from(schema.assets)
+    .innerJoin(schema.jobs, eq(schema.jobs.id, schema.assets.jobId))
+    .where(filter)
+    .orderBy(desc(schema.assets.createdAt), asc(schema.assets.position))
+    .limit(page * GALLERY_PAGE_SIZE)
 
   const jobIds = [...new Set(rows.map((row) => row.job.id))]
-  const videoJobIds = [
-    ...new Set(rows.filter((row) => row.asset.kind === "video").map((row) => row.job.id))
-  ]
-  const [resultCounts, stills, firstInputs] = await Promise.all([
+  const resultCounts =
     jobIds.length > 0
-      ? db
-          .select({ jobId: schema.assets.jobId, total: count() })
+      ? await db
+          .select({
+            jobId: schema.assets.jobId,
+            role: schema.assets.role,
+            total: count()
+          })
           .from(schema.assets)
           .where(
             and(
@@ -297,23 +320,14 @@ export async function readGallery(query: {
               inArray(schema.assets.role, GALLERY_ROLES)
             )
           )
-          .groupBy(schema.assets.jobId)
-      : [],
-    videoJobIds.length > 0
-      ? db
-          .select(assetViewColumns)
-          .from(schema.assets)
-          .where(
-            and(
-              inArray(schema.assets.jobId, videoJobIds),
-              eq(schema.assets.role, "still")
-            )
-          )
-      : [],
-    readFirstInputs(videoJobIds)
-  ])
-  const stillByJob = new Map(stills.map((still) => [still.jobId, toAssetView(still)]))
-  const resultsByJob = new Map(resultCounts.map((row) => [row.jobId, row.total]))
+          .groupBy(schema.assets.jobId, schema.assets.role)
+      : []
+  const resultsByJob = new Map<string | null, number>()
+  const resultsByRole = new Map<string, number>()
+  for (const row of resultCounts) {
+    resultsByJob.set(row.jobId, (resultsByJob.get(row.jobId) ?? 0) + row.total)
+    resultsByRole.set(`${row.jobId}:${row.role}`, row.total)
+  }
 
   const data = rows.map((row) => ({
     asset: toAssetView(row.asset),
@@ -323,11 +337,8 @@ export async function readGallery(query: {
       row.asset.kind === "audio"
         ? (scriptLines(row.job.prompt)[row.asset.position] ?? row.job.prompt)
         : row.job.prompt,
-    poster:
-      row.asset.kind === "video"
-        ? (stillByJob.get(row.job.id) ?? firstInputs.get(row.job.id) ?? null)
-        : null,
-    jobResults: resultsByJob.get(row.job.id) ?? 1
+    jobResults: resultsByJob.get(row.job.id) ?? 1,
+    setSize: resultsByRole.get(`${row.job.id}:${row.asset.role}`) ?? 1
   }))
 
   return toPagination(data, total, page, GALLERY_PAGE_SIZE)

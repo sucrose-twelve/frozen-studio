@@ -1,6 +1,6 @@
 "use client"
 
-import { ImageSparkles, Mic, Scissors, VideoSparkles } from "@keyline-icons/react"
+import { ImageSparkles, Mic, Scissors } from "@keyline-icons/react"
 import { useCallback, useEffect } from "react"
 
 import { JOB_KIND_LABELS } from "@/constants"
@@ -10,7 +10,6 @@ import { useStudioQuery } from "../hooks/use-studio-query"
 import { CutoutForm } from "./cutout-form"
 import { ImageForm } from "./image-form"
 import { KindSwitch, type KindItem } from "./kind-switch"
-import { VideoForm } from "./video-form"
 import { VoiceForm } from "./voice-form"
 
 /**
@@ -18,7 +17,6 @@ import { VoiceForm } from "./voice-form"
  */
 const MAKER_MODES: KindItem<Media.StudioMode>[] = [
   { id: "image", label: JOB_KIND_LABELS.image, Icon: ImageSparkles },
-  { id: "video", label: JOB_KIND_LABELS.video, Icon: VideoSparkles },
   { id: "voice", label: JOB_KIND_LABELS.voice, Icon: Mic }
 ]
 
@@ -29,7 +27,7 @@ const CUTOUT_MODE: KindItem<Media.StudioMode> = {
 }
 
 /**
- * The left panel: the mode switch and the four forms.
+ * The left panel: the mode switch and the three forms.
  *
  * All of them stay mounted and only the chosen one shows, so switching modes never loses what was typed in
  * the others. A prefill request from the canvas brings its form forward; one for the Caption form is that
@@ -64,9 +62,6 @@ export function StudioForms() {
       <div className='min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pt-4'>
         <div hidden={mode !== "image"} className='h-full'>
           <ImageForm isActive={mode === "image"} />
-        </div>
-        <div hidden={mode !== "video"} className='h-full'>
-          <VideoForm isActive={mode === "video"} />
         </div>
         <div hidden={mode !== "cutout"} className='h-full'>
           <CutoutForm isActive={mode === "cutout"} />

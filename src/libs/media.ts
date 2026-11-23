@@ -9,8 +9,6 @@ const MIME_TYPES: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".webp": "image/webp",
-  ".mp4": "video/mp4",
-  ".webm": "video/webm",
   ".wav": "audio/wav"
 }
 
