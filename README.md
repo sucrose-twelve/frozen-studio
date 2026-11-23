@@ -1,8 +1,10 @@
-# Frozen
+# Frozen Studio • Local AI media generator
 
 A local media studio: a web UI for generating images and voice lines, and for describing
 images, with models that run on this machine. Forms on the left, the result on the right,
 every result kept in a gallery.
+
+![Frozen Studio: a form on the left, the result on the right](public/screenshot.png)
 
 | Mode    | What it does                                                                                                                                                                                                           | Model                                   |
 | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
