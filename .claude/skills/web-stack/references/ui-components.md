@@ -126,8 +126,16 @@ The header keeps the two apart:
 ### Destructive actions
 
 Deleting asks first, in an `AlertDialog` that says what is lost and that it can't be
-undone (`DeleteJobButton`). The confirming button is `variant='danger'` with `isPending`
-while the action runs.
+undone. The confirming button is `variant='danger'` with `isPending` while the action
+runs.
+
+- An **image** is deleted on its own (`DeleteAssetButton` → `deleteAsset` in
+  `actions/assets/delete.ts`), so a bad picture in a set goes and the good ones stay. It
+  takes its cutout (same job, same position) along, and the job goes too when it was the
+  last result (`isLastResultOf`). The canvas or the gallery's viewer then moves to the
+  next image of the job.
+- A **job** without an image on screen (voice clips, captions, a failed job) is deleted
+  whole (`DeleteJobButton` → `deleteJob`).
 
 ### Server Actions from a button
 

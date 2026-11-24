@@ -9,8 +9,10 @@ import { readAssetJob, readGallery, type GalleryItem } from "@/actions/jobs/read
 import { GALLERY_KINDS } from "@/constants"
 import { cls } from "@/libs/utils"
 
+import { DeleteAssetButton } from "../components/delete-asset-button"
 import { DeleteJobButton } from "../components/delete-job-button"
 import { VoiceClip } from "../components/voice-clip"
+import { isLastResultOf } from "../utils"
 import { GalleryFilters } from "./components/gallery-filters"
 import { GalleryLoader } from "./components/gallery-loader"
 import { GalleryViewer } from "./components/gallery-viewer"
@@ -50,9 +52,10 @@ function aspectOf(asset: GalleryItem["asset"]) {
 }
 
 /**
- * One picture: a link that opens it in the viewer, with a delete button over its corner. The link replaces
- * the history entry and keeps the scroll, so closing the viewer is where it was. A picture whose job made
- * more than one (of its role) shows how many in its top-left corner: the viewer pages through them all.
+ * One picture: a link that opens it in the viewer, with a button over its corner that deletes this picture
+ * alone (`DeleteAssetButton`), not its whole job. The link replaces the history entry and keeps the scroll,
+ * so closing the viewer is where it was. A picture whose job made more than one (of its role) shows how
+ * many in its top-left corner: the viewer pages through them all.
  *
  * The tile is one item of a justified row (see `Gallery`): it starts `--row-height` tall at its own
  * aspect, and grows by its aspect too, so every tile of a row ends up the same height and the row fills
@@ -106,9 +109,12 @@ function GalleryTile({ item, href }: Readonly<{ item: GalleryItem; href: string 
       </NextLink>
 
       <div className='absolute right-2 bottom-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100'>
-        <DeleteJobButton
-          jobId={item.jobId}
-          resultCount={item.jobResults}
+        <DeleteAssetButton
+          asset={asset}
+          isLastResult={isLastResultOf(asset, {
+            outputs: item.setSize,
+            results: item.jobResults
+          })}
           className='bg-night/75 text-frost hover:bg-night rounded-full'
         />
       </div>
@@ -162,7 +168,7 @@ export default async function Gallery({ searchParams }: NextSearchParams) {
             {page.count === 1 ? "1 result" : `${page.count} results`}.{" "}
             {query.kind === "audio"
               ? "Play a clip here, or open it in the studio to reroll it or reuse its settings."
-              : "Open one to reroll it, reuse its settings, or send it on; hover one to delete its job."}
+              : "Open one to reroll it, reuse its settings, or send it on; hover one to delete it."}
           </p>
         </div>
         <GalleryFilters />

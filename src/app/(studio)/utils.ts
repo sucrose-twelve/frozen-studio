@@ -98,3 +98,17 @@ export function resultFacts(job: JobDetail, asset: AssetView) {
 
   return facts
 }
+
+/**
+ * Whether deleting a result would leave its job with none. An image takes its cutout along, and a job only has
+ * cutouts of its images (or, a cutout job, a cutout alone), so the last image is the last result.
+ *
+ * @param outputs - How many images the job has
+ * @param results - How many results it has, images and cutouts together
+ */
+export function isLastResultOf(
+  asset: AssetView,
+  { outputs, results }: { outputs: number; results: number }
+) {
+  return asset.role === "output" ? outputs <= 1 : results <= 1
+}

@@ -115,3 +115,15 @@ export function readFileStream(
     }
   })
 }
+
+/**
+ * Deletes the folder a job wrote its files into (`<output>/frozen/<jobId>`), with everything in it.
+ *
+ * @param jobId - A job id that passed the UUID check, so the folder can only belong to that job
+ */
+export function removeJobFolder(jobId: string) {
+  return fs.promises.rm(path.join(mediaRoot("output"), MEDIA_FOLDER, jobId), {
+    recursive: true,
+    force: true
+  })
+}

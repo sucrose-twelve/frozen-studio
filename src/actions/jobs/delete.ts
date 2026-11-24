@@ -1,13 +1,10 @@
 "use server"
 
-import fs from "node:fs"
-import path from "node:path"
-
 import { eq } from "drizzle-orm"
 
-import { ACTIVE_JOB_STATUSES, MEDIA_FOLDER } from "@/constants"
+import { ACTIVE_JOB_STATUSES } from "@/constants"
 import { db, schema } from "@/drizzle"
-import { mediaRoot } from "@/libs/media"
+import { removeJobFolder } from "@/libs/media"
 
 import { jobIdValidator } from "./validator.zod"
 
@@ -36,11 +33,6 @@ export async function deleteJob(input: unknown) {
   }
 
   await db.delete(schema.jobs).where(eq(schema.jobs.id, id))
-  // `id` passed the UUID check above, so this folder can only belong to the job
-  await fs.promises.rm(path.join(mediaRoot("output"), MEDIA_FOLDER, id), {
-    recursive: true,
-    force: true
-  })
-
+  await removeJobFolder(id)
   return { ok: true as const }
 }

@@ -28,9 +28,11 @@ export function useStudioQuery() {
     (job: string | null) => setQuery({ job, asset: null }),
     [setQuery]
   )
+  // Another result of the job on the canvas, e.g. the next one after a result was deleted
+  const showAsset = useCallback((asset: string | null) => setQuery({ asset }), [setQuery])
 
   return useMemo(
-    () => ({ query, isPending, setMode, showJob }),
-    [query, isPending, setMode, showJob]
+    () => ({ query, isPending, setMode, showJob, showAsset }),
+    [query, isPending, setMode, showJob, showAsset]
   )
 }

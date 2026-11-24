@@ -16,14 +16,17 @@ import type { AssetView, JobDetail } from "@/actions/jobs/read"
 
 import { usePrefill } from "../hooks/use-prefill"
 import { useStudioQuery } from "../hooks/use-studio-query"
+import { isLastResultOf } from "../utils"
 import { DownloadButton, FavoriteButton } from "./asset-buttons"
+import { DeleteAssetButton } from "./delete-asset-button"
 import { DeleteJobButton } from "./delete-job-button"
 
 const ICON = { size: 15, strokeWidth: 1.75 } as const
 
 /**
  * What can be done with a finished job: roll it again, reuse its settings, delete it. With a result on the
- * canvas there is more: send the image on to another form, download it, keep it.
+ * canvas there is more: send the image on to another form, download it, keep it, and delete only that image
+ * (the job's other results stay).
  *
  * A job these start (a reroll, a cutout) shows on the studio's canvas, so from another page (the gallery's
  * viewer) they go to the studio.
@@ -126,7 +129,17 @@ export function ResultActions({
 
       <div className='ml-auto flex items-center gap-2'>
         {asset ? <FavoriteButton asset={asset} /> : null}
-        <DeleteJobButton jobId={job.id} />
+        {asset?.kind === "image" ? (
+          <DeleteAssetButton
+            asset={asset}
+            isLastResult={isLastResultOf(asset, {
+              outputs: job.outputs.length,
+              results: job.outputs.length + job.cutouts.length
+            })}
+          />
+        ) : (
+          <DeleteJobButton jobId={job.id} />
+        )}
       </div>
     </div>
   )
