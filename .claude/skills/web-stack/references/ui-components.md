@@ -45,7 +45,6 @@ Don't write a component from memory. In order of preference:
 | `Modal`                | `<Modal>` > trigger `Button` + `Modal.Backdrop` > `Modal.Container size` > `Modal.Dialog` > `CloseTrigger`, `Header` > `Heading`, `Body`           | `job-result.tsx`        |
 | `AlertDialog`          | Controlled: `useOverlayState()` + `<AlertDialog.Backdrop isOpen onOpenChange>` > `Container` > `Dialog` > `Header`, `Body`, `Footer`               | `delete-job-button.tsx` |
 | `Tooltip`              | `<Tooltip delay>` > `Tooltip.Trigger` + `Tooltip.Content placement`                                                                                | `memory-status.tsx`     |
-| `Meter`                | `value`, `maxValue`, `size='sm'`, `color`, `aria-label`; `Meter.Track` > `Meter.Fill`                                                              | `memory-status.tsx`     |
 | `Popover`              | `<Popover>` > `Popover.Trigger` (styled as the chip) + `Popover.Content placement` > `Popover.Dialog` > `Popover.Heading`                          | `engine-status.tsx`     |
 | `ProgressBar`          | `value`, `isIndeterminate`; `ProgressBar.Track` > `ProgressBar.Fill`                                                                               | `job-progress.tsx`      |
 | `Chip`                 | `variant='soft'`, `size='sm'`                                                                                                                      | `job-result.tsx`        |
@@ -112,16 +111,17 @@ The header keeps the two apart:
   VRAM. Pressing it opens a `Popover` listing the worker and every `Engine.Service` the
   worker reported (ComfyUI, Postgres, Redis, the Python services). A Python service that
   isn't running is "Starts when needed", not offline.
-- `MemoryStatus` sits beside it: RAM and VRAM as used/total with a small `Meter` each
-  (amber past 75%, red past 90%), and used and free in a `Tooltip`. The worker reads them
-  each beat (`worker/memory.ts`: `os` for RAM, `nvidia-smi` for VRAM) into
-  `Engine.Status.memory`; the chip is hidden while the worker isn't running.
+- `MemoryStatus` sits beside it: RAM and VRAM as used/total, the used figure amber past
+  75% and red past 90%, and used and free in a `Tooltip`. The worker reads them each beat
+  (`worker/memory.ts`: `os` for RAM, `nvidia-smi` for VRAM) into `Engine.Status.memory`;
+  the chip is hidden while the worker isn't running.
 - `JobToasts` shows each queued or running job as a toast in the shared stack (`toast()`
   from `@heroui/react`): kept open with its progress and a Cancel button, then updated in
   place to Done (with Open), Failed or Canceled for a few seconds. The stack is always
   expanded (`isExpanded` on the `Toaster`, up to 5 at once). A page names a job from the
   `brief` on its queued event, or from `readActiveJobs` for jobs already active when it
-  rendered.
+  rendered. A brief carries the job's kind and up to four lines of settings (`jobDetails`
+  in `@/libs/job`: model, size, sampling, seed), never the prompt, which can run long.
 
 ### Destructive actions
 

@@ -41,12 +41,14 @@ import {
   isGgufFile,
   isTurboImageModel,
   listImageModels,
+  loraLabel,
+  modelLabel,
   textEncodersFor
 } from "@/libs/image-model"
 
 import { useDefaultModel } from "../hooks/use-default-model"
 import { useStudioQuery } from "../hooks/use-studio-query"
-import { IMAGE_FORM_DEFAULTS, loraLabel, modelLabel, parseSeed } from "../utils"
+import { IMAGE_FORM_DEFAULTS, parseSeed } from "../utils"
 import {
   FieldMessage,
   FieldRow,

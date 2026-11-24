@@ -1,4 +1,4 @@
-import { IMAGE_FAMILIES, IMAGE_FAMILY_SAMPLING } from "@/constants"
+import { IMAGE_FAMILIES, IMAGE_FAMILY_LABELS, IMAGE_FAMILY_SAMPLING } from "@/constants"
 
 /**
  * Which family an image model file belongs to. The file name is all there is to go by: MOSS-Image files
@@ -99,4 +99,40 @@ export function textEncodersFor(
  */
 export function listImageModels(image: Engine.Models["image"] | undefined) {
   return IMAGE_FAMILIES.flatMap((family) => image?.[family]?.models ?? [])
+}
+
+/**
+ * A readable name for a model file, e.g. `qwen-image-2.1-step90000-FP8-comfy.safetensors` becomes
+ * "Qwen-Image 2.1 Omni · FP8" and `moss_image_sft_int8_convrot.safetensors` "MOSS-Image · sft_int8_convrot".
+ * The `stepNNNNN` marker is how the Omni merge names its builds. A name that follows neither pattern is
+ * shown as it is, without the extension.
+ */
+export function modelLabel(fileName: string) {
+  const base = fileName.replace(/\.(safetensors|gguf)$/i, "")
+  if (/^moss[-_]image[-_]/i.test(base)) {
+    return `${IMAGE_FAMILY_LABELS.moss} · ${base.replace(/^moss[-_]image[-_]/i, "")}`
+  }
+  if (!/^qwen[-_]image[-_]2\.1/i.test(base)) return base
+
+  const variant = base
+    .replace(/^qwen[-_]image[-_]2\.1[-_]?/i, "")
+    .replace(/step\d+[-_]?/i, "")
+    .replace(/[-_]comfy$/i, "")
+  const family = /step\d+/i.test(base) ? "Qwen-Image 2.1 Omni" : "Qwen-Image 2.1"
+
+  return variant ? `${family} · ${variant}` : family
+}
+
+/**
+ * A readable name for a LoRA file. It is listed under its model, so the model's name in front and the
+ * "ComfyUI" some releases end with say nothing: `MOSS-Image-Anime-LoRA-ComfyUI.safetensors` becomes
+ * "Anime-LoRA".
+ */
+export function loraLabel(fileName: string) {
+  const base = fileName.replace(/\.(safetensors|gguf)$/i, "")
+  const short = base
+    .replace(/^(?:moss|qwen)[-_]image[-_](?:2\.1[-_])?/i, "")
+    .replace(/[-_]comfyui$/i, "")
+
+  return short || base
 }

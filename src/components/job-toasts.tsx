@@ -22,12 +22,27 @@ function jobPath({ id, kind }: Engine.JobBrief) {
   return kind === "caption" ? `/caption?job=${id}` : `/?job=${id}&mode=${kind}`
 }
 
+/**
+ * A job's settings, one fact per line (`jobDetails`): what tells two toasts apart without the prompt.
+ */
+function JobDetails({ details }: Readonly<{ details: string[] }>) {
+  return (
+    <span className='flex flex-col'>
+      {details.map((line) => (
+        <span key={line} className='truncate'>
+          {line}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 function JobToastBody({
-  prompt,
+  details,
   status,
   progress
 }: Readonly<{
-  prompt: string
+  details: string[]
   status: Media.JobStatus
   progress: Engine.Progress | null
 }>) {
@@ -37,7 +52,7 @@ function JobToastBody({
 
   return (
     <span className='flex flex-col gap-1.5'>
-      {prompt ? <span className='line-clamp-1'>{prompt}</span> : null}
+      <JobDetails details={details} />
       {status === "running" ? (
         <ProgressBar
           aria-label='Progress'
@@ -66,7 +81,7 @@ function activeToast(
 ): HeroUIToastOptions {
   return {
     description: (
-      <JobToastBody prompt={brief.prompt} status={job.status} progress={job.progress} />
+      <JobToastBody details={brief.details} status={job.status} progress={job.progress} />
     ),
     isLoading: job.status === "running",
     indicator:
@@ -130,7 +145,8 @@ export function JobToasts() {
       toast.update(key, title, {
         variant:
           status === "succeeded" ? "success" : status === "failed" ? "danger" : "default",
-        description: status === "failed" ? job.error : brief.prompt || undefined,
+        description:
+          status === "failed" ? job.error : <JobDetails details={brief.details} />,
         actionProps:
           status === "succeeded"
             ? {

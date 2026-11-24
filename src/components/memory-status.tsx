@@ -1,20 +1,21 @@
 "use client"
 
-import { Meter, Tooltip } from "@heroui/react"
+import { Tooltip } from "@heroui/react"
 
 import { useEngine } from "@/hooks"
+import { cls } from "@/libs/utils"
 
 const GIBIBYTE = 1024 ** 3
 
 const gigabytes = (bytes: number) => (bytes / GIBIBYTE).toFixed(1)
 
 /**
- * The fill turns amber past three quarters and red past nine tenths: by then a model load may spill into
- * system RAM, or out of it into the page file.
+ * The used figure turns amber past three quarters and red past nine tenths: by then a model load may spill
+ * into system RAM, or out of it into the page file.
  */
-function colorOf(usage: Engine.MemoryUsage) {
+function usedClassOf(usage: Engine.MemoryUsage) {
   const share = usage.used / usage.total
-  return share >= 0.9 ? "danger" : share >= 0.75 ? "warning" : "default"
+  return share >= 0.9 ? "text-danger" : share >= 0.75 ? "text-warning" : undefined
 }
 
 function MemoryGauge({
@@ -24,19 +25,9 @@ function MemoryGauge({
   return (
     <span className='inline-flex items-center gap-2'>
       <span className='text-muted'>{label}</span>
-      <Meter
-        aria-label={`${label} used`}
-        size='sm'
-        color={colorOf(usage)}
-        value={usage.used}
-        maxValue={usage.total}
-        className='w-12'>
-        <Meter.Track>
-          <Meter.Fill />
-        </Meter.Track>
-      </Meter>
       <span className='font-mono tabular-nums'>
-        {gigabytes(usage.used)}/{gigabytes(usage.total)} GB
+        <span className={cls(usedClassOf(usage))}>{gigabytes(usage.used)}</span>/
+        {gigabytes(usage.total)} GB
       </span>
     </span>
   )

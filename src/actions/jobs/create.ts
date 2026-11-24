@@ -10,7 +10,13 @@ import {
   listImageModels,
   textEncodersFor
 } from "@/libs/image-model"
-import { randomSeed, toCaptionParams, toImageParams, toVoiceParams } from "@/libs/job"
+import {
+  jobDetails,
+  randomSeed,
+  toCaptionParams,
+  toImageParams,
+  toVoiceParams
+} from "@/libs/job"
 import { enqueueJobs, readEngineStatus } from "@/libs/queue"
 
 import { jobIdValidator, jobValidator } from "./validator.zod"
@@ -50,7 +56,7 @@ async function saveAndEnqueue(drafts: Draft[]) {
     ids.map((id, index) => ({
       id,
       kind: drafts[index].kind,
-      prompt: drafts[index].prompt
+      details: jobDetails(drafts[index].prompt, drafts[index].params)
     }))
   )
   return ids

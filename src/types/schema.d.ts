@@ -255,12 +255,13 @@ declare namespace Engine {
   }
 
   /**
-   * What a browser needs to name a job before it has loaded the job itself.
+   * What a browser needs to show a job before it has loaded the job itself: its kind, and a few lines
+   * about its settings (`jobDetails`).
    */
   export type JobBrief = {
     id: string
     kind: Media.JobKind
-    prompt: string
+    details: string[]
   }
 
   export type Progress = {

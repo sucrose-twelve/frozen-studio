@@ -3,9 +3,16 @@ import type {
   ImageValidator,
   VoiceValidator
 } from "@/actions/jobs/validator.zod"
-import { IMAGE_SIZES, IMAGE_TURBO } from "@/constants"
+import {
+  CAPTION_MODE_LABELS,
+  CAPTION_STYLE_LABELS,
+  IMAGE_SAMPLER_LABELS,
+  IMAGE_SIZES,
+  IMAGE_TURBO
+} from "@/constants"
 
-import { imageEngine, isTurboImageModel } from "./image-model"
+import { imageEngine, isTurboImageModel, loraLabel, modelLabel } from "./image-model"
+import { voiceLabel } from "./voice-model"
 
 /**
  * A fresh seed under 2^48, the range the validators accept.
@@ -120,5 +127,57 @@ export function toCaptionParams(
       mode: input.mode,
       style: input.style
     }
+  }
+}
+
+/**
+ * A few short lines about what a job will make and with what, for its toast. The prompt is left out: it can
+ * run to paragraphs. Four lines at most, so the toast stays within five with its progress line.
+ *
+ * @param prompt - Only read for a voice job, whose script's lines are counted
+ */
+export function jobDetails(prompt: string, params: Media.JobParams): string[] {
+  switch (params.kind) {
+    case "image": {
+      const size =
+        params.width && params.height
+          ? `${params.width} × ${params.height}`
+          : "Size of the first reference"
+      const images = params.count === 1 ? "1 image" : `${params.count} images`
+      const sampler = params.sampler
+        ? IMAGE_SAMPLER_LABELS[params.sampler]
+        : "Auto sampler"
+      const extras = [
+        params.lora ? `${loraLabel(params.lora.name)} ${params.lora.strength}` : null,
+        `seed ${params.seed}`,
+        params.shouldRemoveBackground ? "cutout" : null
+      ]
+
+      return [
+        imageEngine(params.textEncoder) === "sdcpp"
+          ? `${modelLabel(params.model)} · sd.cpp`
+          : modelLabel(params.model),
+        `${size} · ${images}`,
+        `${params.steps} steps · CFG ${params.cfg} · ${sampler}`,
+        extras.filter(Boolean).join(" · ")
+      ]
+    }
+    case "voice": {
+      const lines = scriptLines(prompt).length
+      return [
+        params.model,
+        `${voiceLabel(params.voice)} voice`,
+        `${lines === 1 ? "1 line" : `${lines} lines`} · seed ${params.seed}`
+      ]
+    }
+    case "caption":
+      return [
+        params.model,
+        params.mode === "prompts"
+          ? `${CAPTION_MODE_LABELS.prompts} · ${CAPTION_STYLE_LABELS[params.style]}`
+          : CAPTION_MODE_LABELS.answer
+      ]
+    case "cutout":
+      return ["Background removal"]
   }
 }

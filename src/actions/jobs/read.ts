@@ -5,7 +5,7 @@ import { ACTIVE_JOB_STATUSES, GALLERY_PAGE_SIZE, RECENT_JOBS } from "@/constants
 import { db, schema } from "@/drizzle"
 import { assetColumns, jobColumns } from "@/drizzle/table-columns"
 import { lastPageOf, toPagination } from "@/drizzle/utils"
-import { scriptLines } from "@/libs/job"
+import { jobDetails, scriptLines } from "@/libs/job"
 import { assetFileName } from "@/libs/media"
 
 /**
@@ -188,11 +188,18 @@ export type ActiveJob = Engine.JobBrief & { status: Media.JobStatus }
  * Every job the worker still has to finish, oldest first: the job toasts a page opens with.
  */
 export async function readActiveJobs(): Promise<ActiveJob[]> {
-  return db
-    .select(pick(jobColumns, ["id", "kind", "status", "prompt"]))
+  const jobs = await db
+    .select(pick(jobColumns, ["id", "kind", "status", "prompt", "params"]))
     .from(schema.jobs)
     .where(inArray(schema.jobs.status, [...ACTIVE_JOB_STATUSES]))
     .orderBy(asc(schema.jobs.createdAt))
+
+  return jobs.map((job) => ({
+    id: job.id,
+    kind: job.kind,
+    status: job.status,
+    details: jobDetails(job.prompt, job.params)
+  }))
 }
 
 /**

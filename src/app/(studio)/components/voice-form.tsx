@@ -17,11 +17,11 @@ import {
 } from "@/constants"
 import { useEngine, useStore } from "@/hooks"
 import { scriptLines } from "@/libs/job"
-import { voiceFamily } from "@/libs/voice-model"
+import { voiceFamily, voiceLabel } from "@/libs/voice-model"
 
 import { useDefaultModel } from "../hooks/use-default-model"
 import { useStudioQuery } from "../hooks/use-studio-query"
-import { defaultVoicePreset, parseSeed, VOICE_FORM_DEFAULTS, voiceLabel } from "../utils"
+import { defaultVoicePreset, parseSeed, VOICE_FORM_DEFAULTS } from "../utils"
 import { FieldMessage, FieldRow, FormDivider, FormSection } from "./form-parts"
 import { ModelSelect } from "./model-select"
 import { SubmitBar } from "./submit-bar"

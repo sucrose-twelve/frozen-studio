@@ -6,8 +6,8 @@ import { useMemo } from "react"
 import type { JobDetail } from "@/actions/jobs/read"
 import { scriptLines } from "@/libs/job"
 import { formatElapsed } from "@/libs/utils"
+import { voiceLabel } from "@/libs/voice-model"
 
-import { voiceLabel } from "../utils"
 import { ResultActions } from "./result-actions"
 import { VoiceClip } from "./voice-clip"
 

@@ -8,10 +8,11 @@ import { useCallback, useMemo, useState } from "react"
 
 import type { JobDetail } from "@/actions/jobs/read"
 import { JOB_KIND_LABELS } from "@/constants"
+import { loraLabel, modelLabel } from "@/libs/image-model"
 
 import { CopyText } from "../../components/copy-text"
 import { ResultActions } from "../../components/result-actions"
-import { loraLabel, modelLabel, resultFacts } from "../../utils"
+import { resultFacts } from "../../utils"
 import { ImageSlider } from "./image-slider"
 
 /**
