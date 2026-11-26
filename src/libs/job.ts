@@ -8,11 +8,21 @@ import {
   CAPTION_STYLE_LABELS,
   IMAGE_SAMPLER_LABELS,
   IMAGE_SIZES,
-  IMAGE_TURBO
+  IMAGE_TURBO,
+  SPEECH_LANGUAGE_LABELS,
+  STUDIO_MODES
 } from "@/constants"
 
+import { chatModelLabel } from "./chat"
 import { imageEngine, isTurboImageModel, loraLabel, modelLabel } from "./image-model"
 import { voiceLabel } from "./voice-model"
+
+/**
+ * Whether a kind of job is one of the studio page's modes, rather than Caption's or the Chat page's.
+ */
+export function isStudioMode(kind: Media.JobKind): kind is Media.StudioMode {
+  return (STUDIO_MODES as readonly Media.JobKind[]).includes(kind)
+}
 
 /**
  * A fresh seed under 2^48, the range the validators accept.
@@ -179,5 +189,16 @@ export function jobDetails(prompt: string, params: Media.JobParams): string[] {
       ]
     case "cutout":
       return ["Background removal"]
+    case "chat":
+      return [
+        chatModelLabel(params.model),
+        `Temperature ${params.sampling.temperature} · up to ${params.sampling.maxTokens} tokens`
+      ]
+    case "speech":
+      return [
+        params.model,
+        params.messageId ? "A chat message" : "A voice sample",
+        SPEECH_LANGUAGE_LABELS[params.language]
+      ]
   }
 }

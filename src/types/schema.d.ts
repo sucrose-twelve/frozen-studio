@@ -1,10 +1,11 @@
 declare namespace Media {
-  export type JobKind = "image" | "cutout" | "voice" | "caption"
+  export type JobKind = "image" | "cutout" | "voice" | "caption" | "chat" | "speech"
 
   /**
-   * The kinds whose forms share the studio page. A caption job has a page of its own.
+   * The kinds whose forms share the studio page. A caption job has a page of its own; a chat job (one reply)
+   * and a speech job (a reply spoken aloud) belong to the Chat page.
    */
-  export type StudioMode = Exclude<JobKind, "caption">
+  export type StudioMode = Exclude<JobKind, "caption" | "chat" | "speech">
 
   export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "canceled"
 
@@ -91,7 +92,7 @@ declare namespace Media {
    * The families of voice model. They differ in what a description can ask for, and each is loaded and
    * spoken with in its own way; which one a model folder belongs to is read from its name (`voiceFamily`).
    */
-  export type VoiceFamily = "parler" | "qwen" | "voxcpm"
+  export type VoiceFamily = "qwen" | "voxcpm"
 
   /**
    * A voice job speaks its prompt, one clip per line.
@@ -141,7 +142,87 @@ declare namespace Media {
     style: CaptionStyle
   }
 
-  export type JobParams = ImageParams | CutoutParams | VoiceParams | CaptionParams
+  /**
+   * Who wrote a chat message: the user, or the character (the model).
+   */
+  export type ChatRole = "user" | "assistant"
+
+  /**
+   * How a chat's replies are sampled. The names follow llama.cpp's `/completion` options.
+   *
+   * - `minP`: drops tokens far less likely than the best one, which keeps a high temperature coherent
+   * - `repeatPenalty`: a light push against repeating recent tokens
+   * - `dryMultiplier`: DRY, which penalises repeating a whole run of text seen earlier in the chat (the same
+   *   sign-off line at the end of every reply); 0 turns it off
+   * - `maxTokens`: the longest a reply can get
+   */
+  export type ChatSampling = {
+    temperature: number
+    minP: number
+    repeatPenalty: number
+    dryMultiplier: number
+    maxTokens: number
+  }
+
+  /**
+   * What a chat runs on, kept with the chat and changed from its page.
+   */
+  export type ChatSettings = {
+    model: string
+    sampling: ChatSampling
+  }
+
+  /**
+   * A chat job writes one reply: the assistant message `messageId` in chat `chatId`, which the app saved
+   * empty when it queued the job. The prompt is built by the worker from the chat itself, so `jobs.prompt`
+   * stays empty.
+   */
+  export type ChatParams = {
+    kind: "chat"
+    model: string
+    chatId: string
+    messageId: string
+    sampling: ChatSampling
+  }
+
+  /**
+   * The language a character speaks in: Japanese, translated from what it writes, or the language it
+   * writes in.
+   */
+  export type SpeechLanguage = "ja" | "original"
+
+  /**
+   * How a chat character sounds. The voice is made up once from `description` into a sample clip
+   * (`sampleAssetId`), and every message after that clones the sample, so the character keeps one voice.
+   * Only VoxCPM2 can clone; with the other voice models each message is made up afresh from the
+   * description.
+   */
+  export type CharacterVoice = {
+    model: string
+    description: string
+    language: SpeechLanguage
+    seed: number
+    sampleAssetId: string | null
+  }
+
+  /**
+   * A speech job speaks one chat message aloud, or with `messageId` null makes a character's voice sample.
+   * The spoken text is the message's dialogue, translated by `chatModel` (the chat's model) when the
+   * character speaks Japanese, and kept on the message (`chat_messages.speech_text`).
+   */
+  export type SpeechParams = {
+    kind: "speech"
+    model: string
+    characterId: string
+    messageId: string | null
+    description: string
+    language: SpeechLanguage
+    seed: number
+    chatModel: string | null
+  }
+
+  export type JobParams =
+    ImageParams | CutoutParams | VoiceParams | CaptionParams | ChatParams | SpeechParams
 
   /**
    * What a caption job wrote. It is text, not a file, so it is kept on the job (`jobs.result`) instead of
@@ -172,6 +253,10 @@ declare namespace Engine {
     cutout: { model: string } | null
     voice: { models: string[] } | null
     caption: { models: string[] } | null
+    /**
+     * The GGUF files llama.cpp can run for the Chat page.
+     */
+    chat: { models: string[] } | null
   }
 
   /**
@@ -286,6 +371,11 @@ declare namespace Engine {
       }
     | ({ type: "progress"; id: string } & Progress)
     | { type: "engine"; engine: Status }
+    /**
+     * A chat reply while it is written: the whole text so far, so a page that opens mid-reply catches up from
+     * the next event. `id` is the chat job's.
+     */
+    | { type: "chat"; id: string; messageId: string; text: string }
 
   /**
    * What the app tells the worker over Redis.

@@ -123,6 +123,19 @@ The header keeps the two apart:
   rendered. A brief carries the job's kind and up to four lines of settings (`jobDetails`
   in `@/libs/job`: model, size, sampling, seed), never the prompt, which can run long.
 
+### Chat
+
+The Chat page (`app/(studio)/chat/`) has three panels: characters with their chats, the
+thread, and the chat's portrait, model, sampling and the user's persona. A message's
+actions (`*…*`) show as muted italics (`messageParts`). A reply being written comes from
+the store (`replies`, fed by `chat` events) and wins over the server's text while its job
+is active. Sampling saves as it changes. The character editor (`/chat/characters/[id]`,
+`new` for a new one) reuses `ReferencePicker` with `max={1}` for the avatar and the
+portrait, and has the voice under them (`character-voice.tsx`): model, spoken language,
+description and the sample, saved by "Make a sample" apart from the card's Save. A message
+of a character with a voice has a Speak button (`Volume`); its clip plays by itself once
+ready, with the spoken words under the player (`message-speech.tsx`).
+
 ### Destructive actions
 
 Deleting asks first, in an `AlertDialog` that says what is lost and that it can't be
@@ -214,5 +227,5 @@ variants from those. So:
 Keyline (`@keyline-icons/react`), covered in [libraries.md](libraries.md#keyline-icons).
 Each mode has its icon, used wherever the mode is named: `ImageSparkles` (image),
 `Scissors` (cutout), `Mic` (voice), `ScanText` (caption, which is a page in the header
-rather than a mode of the studio). A voice clip, which has no picture, is shown as
-`AudioLines`.
+rather than a mode of the studio), `MessageSquare` (chat, also a page of its own). A voice
+clip, which has no picture, is shown as `AudioLines`.

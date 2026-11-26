@@ -24,7 +24,6 @@ npm-debug.log*
 next-env.d.ts
 
 # text to speech: the Python environment and the model weights
-/tts/.venv/
 /tts/.venv-design/
 /tts/models/
 __pycache__/
@@ -35,6 +34,10 @@ __pycache__/
 
 # stable-diffusion.cpp: the downloaded program and any models kept beside it
 /sdcpp/
+
+# chat: the downloaded llama.cpp program and the model weights
+/chat/bin/
+/chat/models/
 
 # the launcher's logs and the icon it draws for the Desktop shortcut
 /logs/

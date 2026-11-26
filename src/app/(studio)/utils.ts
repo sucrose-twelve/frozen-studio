@@ -11,7 +11,6 @@ import {
   IMAGE_SAMPLER_LABELS,
   LORA_STRENGTH,
   VOICE_CUSTOM,
-  VOICE_FAMILIES,
   VOICE_PRESETS
 } from "@/constants"
 import { imageEngine } from "@/libs/image-model"
@@ -40,23 +39,17 @@ export const IMAGE_FORM_DEFAULTS: ImageValidator = {
   shouldRemoveBackground: false
 }
 
-/**
- * The preset a family's form starts on: its first.
- */
-export function defaultVoicePreset(family: Media.VoiceFamily) {
-  const [preset] = VOICE_PRESETS[family]
-  return { voice: preset?.id ?? VOICE_CUSTOM, description: preset?.description ?? "" }
-}
+const [FIRST_VOICE] = VOICE_PRESETS
 
 /**
- * The Voice form before a model is picked: the first family's first preset. Picking a model of another
- * family swaps in that family's.
+ * The Voice form before a model is picked: the first preset, which suits either family.
  */
 export const VOICE_FORM_DEFAULTS: VoiceValidator = {
   kind: "voice",
   model: "",
   prompt: "",
-  ...defaultVoicePreset(VOICE_FAMILIES[0]),
+  voice: FIRST_VOICE?.id ?? VOICE_CUSTOM,
+  description: FIRST_VOICE?.description ?? "",
   seed: null
 }
 

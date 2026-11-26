@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, ne } from "drizzle-orm"
+import { and, asc, count, desc, eq, inArray, ne, notInArray } from "drizzle-orm"
 import { groupBy, pick } from "es-toolkit"
 
 import { ACTIVE_JOB_STATUSES, GALLERY_PAGE_SIZE, RECENT_JOBS } from "@/constants"
@@ -73,7 +73,10 @@ export type GalleryItem = {
   setSize: number
 }
 
-const assetViewColumns = pick(assetColumns, [
+/**
+ * The asset columns an `AssetView` is made from. Select them and map the rows with `toAssetView`.
+ */
+export const assetViewColumns = pick(assetColumns, [
   "id",
   "jobId",
   "kind",
@@ -87,7 +90,7 @@ const assetViewColumns = pick(assetColumns, [
 
 type AssetRow = Pick<typeof schema.assets.$inferSelect, keyof typeof assetViewColumns>
 
-function toAssetView(row: AssetRow): AssetView {
+export function toAssetView(row: AssetRow): AssetView {
   return {
     id: row.id,
     kind: row.kind,
@@ -288,6 +291,14 @@ export async function readGallery(query: {
 }): Promise<Pagination<GalleryItem>> {
   const filter = and(
     inArray(schema.assets.role, GALLERY_ROLES),
+    // A spoken chat message is the chat's, and is heard there
+    notInArray(
+      schema.assets.jobId,
+      db
+        .select({ id: schema.jobs.id })
+        .from(schema.jobs)
+        .where(eq(schema.jobs.kind, "speech"))
+    ),
     query.kind === "cutout"
       ? eq(schema.assets.role, "cutout")
       : and(eq(schema.assets.kind, query.kind), ne(schema.assets.role, "cutout")),

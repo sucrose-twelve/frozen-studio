@@ -20,10 +20,12 @@ import { assetFilePath, comfyImageName, mimeTypeOf, readPngFileSize } from "@/li
 import { publishEvent } from "@/libs/queue"
 
 import { runCaptionJob } from "./caption"
+import { runChatJob } from "./chat"
 import { clientId, watchPrompt } from "./comfy-socket"
 import { currentModels } from "./engine"
 import { runSdCppJob } from "./sdcpp"
 import { claimGpu } from "./service"
+import { runSpeechJob } from "./speech"
 import { runVoiceJob } from "./voice"
 
 /**
@@ -40,11 +42,18 @@ export type RunControl = {
 }
 
 /**
- * Whether a job runs on ComfyUI, and so has to wait for it to be up. Voice and caption jobs have services
- * of their own, and an image job with a GGUF text encoder runs on stable-diffusion.cpp.
+ * Whether a job runs on ComfyUI, and so has to wait for it to be up. Voice, caption and chat jobs have
+ * engines of their own, and an image job with a GGUF text encoder runs on stable-diffusion.cpp.
  */
 export function runsOnComfy(params: Media.JobParams) {
-  if (params.kind === "voice" || params.kind === "caption") return false
+  if (
+    params.kind === "voice" ||
+    params.kind === "caption" ||
+    params.kind === "chat" ||
+    params.kind === "speech"
+  ) {
+    return false
+  }
   return params.kind !== "image" || imageEngine(params.textEncoder) === "comfy"
 }
 
@@ -108,8 +117,8 @@ async function collectAssets(
 
 /**
  * Runs one job and saves what it produced: voice jobs on the text-to-speech service, caption jobs on the
- * captioning service, image jobs with a GGUF text encoder on stable-diffusion.cpp, everything else on
- * ComfyUI. Status changes are the caller's.
+ * captioning service, chat replies on llama.cpp, spoken chat messages on both, image jobs with a GGUF text encoder on
+ * stable-diffusion.cpp, everything else on ComfyUI. Status changes are the caller's.
  *
  * @param job - A job already marked `running`
  * @param control - Receives the way to stop the run; a cancel that arrived earlier is honoured
@@ -119,6 +128,8 @@ async function collectAssets(
 export async function processJob(job: Job, control: RunControl) {
   if (job.params.kind === "voice") return runVoiceJob(job, job.params, control)
   if (job.params.kind === "caption") return runCaptionJob(job, job.params, control)
+  if (job.params.kind === "chat") return runChatJob(job, job.params, control)
+  if (job.params.kind === "speech") return runSpeechJob(job, job.params, control)
   if (job.params.kind === "image" && imageEngine(job.params.textEncoder) === "sdcpp") {
     return runSdCppJob(job, job.params, control)
   }

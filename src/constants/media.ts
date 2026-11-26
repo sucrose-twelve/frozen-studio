@@ -2,7 +2,9 @@ export const JOB_KINDS = [
   "image",
   "cutout",
   "voice",
-  "caption"
+  "caption",
+  "chat",
+  "speech"
 ] as const satisfies readonly Media.JobKind[]
 
 /**
@@ -18,7 +20,9 @@ export const JOB_KIND_LABELS: Record<Media.JobKind, string> = {
   image: "Image",
   cutout: "Cutout",
   voice: "Voice",
-  caption: "Caption"
+  caption: "Caption",
+  chat: "Chat",
+  speech: "Speech"
 }
 
 export const JOB_STATUSES = [
@@ -246,60 +250,22 @@ export const VOICE_MAX_LINES = 20
 export const VOICE_MAX_LINE_LENGTH = 160
 
 /**
- * The first is the default: its presets are what the Voice form shows before a model is picked, and its
+ * The first is the default: its notes are what the Voice form shows before a model is picked, and its
  * model is the one `TTS_MODEL_DIR` names unless set otherwise. The model folders themselves are listed
  * by the worker.
  */
 export const VOICE_FAMILIES = [
   "voxcpm",
-  "qwen",
-  "parler"
+  "qwen"
 ] as const satisfies readonly Media.VoiceFamily[]
 
 type VoicePreset = { id: string; label: string; description: string }
 
 /**
- * Voices to start from with Japanese Parler-TTS. Its description is read by a small text encoder that
- * only knows the words of its training captions: pitch, pace, tone and how the recording sounds. "JSUT"
- * names the speaker the model was trained on, which keeps the voice steadier from line to line.
- *
- * The model has that one female voice. Measured on one sentence, the whole range a description reaches
- * is about 246 Hz ("JSUT") to 300 Hz ("high-pitched"), and words outside that vocabulary ("a high school
- * girl", "youthful") change nothing, so there are no presets for other speakers.
+ * Voices to start from. Both families make a voice up from a free description, so a preset says who is
+ * speaking, in plain words.
  */
-const PARLER_PRESETS: readonly VoicePreset[] = [
-  {
-    id: "jsut",
-    label: "JSUT · steady",
-    description:
-      "JSUT speaks with an expressive and animated tone in an excellent recording, with a very close-sounding proximity that suggests a private and intimate setting, and delivers her words at a moderate pace."
-  },
-  {
-    id: "calm",
-    label: "Calm",
-    description:
-      "A female speaker with a slightly low-pitched voice delivers her words slowly with a calm and gentle tone in a very clear, close-sounding recording."
-  },
-  {
-    id: "bright",
-    label: "Bright",
-    description:
-      "A female speaker with a high-pitched voice delivers her words quickly with a very expressive and cheerful tone in a very clear, close-sounding recording."
-  },
-  {
-    id: "low",
-    label: "Low",
-    description:
-      "A female speaker with a very low-pitched voice delivers her words at a moderate pace with a serious, slightly monotone tone in a very clear, close-sounding recording."
-  }
-]
-
-/**
- * Voices to start from with the models that make a voice up from a free description (Qwen3-TTS
- * VoiceDesign, VoxCPM2): who is speaking, in plain words. Their ids are their own, apart from the Parler
- * presets', so a job's `voice` names one preset whichever family it was made with.
- */
-const DESIGN_PRESETS: readonly VoicePreset[] = [
+export const VOICE_PRESETS: readonly VoicePreset[] = [
   {
     id: "girl",
     label: "Girl · bright",
@@ -326,12 +292,6 @@ const DESIGN_PRESETS: readonly VoicePreset[] = [
   }
 ]
 
-export const VOICE_PRESETS: Record<Media.VoiceFamily, readonly VoicePreset[]> = {
-  parler: PARLER_PRESETS,
-  qwen: DESIGN_PRESETS,
-  voxcpm: DESIGN_PRESETS
-}
-
 /**
  * What the Voice form says about a family: which languages its script can be in, what to write as a
  * description, and what the description can and can't do.
@@ -340,12 +300,6 @@ export const VOICE_FAMILY_NOTES: Record<
   Media.VoiceFamily,
   { languages: string; placeholder: string; hint: string }
 > = {
-  parler: {
-    languages: "Japanese",
-    placeholder:
-      "In English: how high or low the voice is, how fast, in what tone, and how the recording sounds.",
-    hint: "This model has one female voice, and reads only a few things from the description: pitch (very low-pitched to very high-pitched), pace (slowly to quickly), tone (monotone to expressive) and the recording. Other words, like an age, change nothing."
-  },
   qwen: {
     languages: "Japanese",
     placeholder:

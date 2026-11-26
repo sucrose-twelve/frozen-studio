@@ -11,7 +11,7 @@ type ServiceOptions = {
    */
   name: string
   /**
-   * What the header's status list calls it: "Voice · Parler-TTS".
+   * What the header's status list calls it: "Caption · Ministral 3".
    */
   label: string
   /**
@@ -24,6 +24,11 @@ type ServiceOptions = {
    * The service's own arguments. `--port` and `--parent-pid` are added.
    */
   args: string[]
+  /**
+   * Whether its models run on the GPU, and so take part in `claimGpu`. False for one set to run on the CPU.
+   * True when left out.
+   */
+  onGpu?: boolean
 }
 
 /**
@@ -41,21 +46,46 @@ const VRAM_HANDOVER_MS = 1_500
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
+ * A program the worker runs beside ComfyUI that keeps a model in VRAM between jobs: the Python services and
+ * llama.cpp's server. `claimGpu` has the others let go before one of them works, and the worker stops them
+ * all on exit.
+ */
+export type GpuService = {
+  /**
+   * Whether its models are in VRAM. One that runs on the CPU keeps them in RAM: `claimGpu` neither has it
+   * let go nor clears the card for it.
+   */
+  onGpu: boolean
+  stop: () => void
+  /**
+   * Has the model let go of its VRAM.
+   *
+   * @returns Whether there was a model to unload
+   */
+  unload: () => Promise<boolean>
+  describe: () => Promise<Engine.Service>
+}
+
+/**
  * One of the Python services beside this project (`tts/server.py`, `caption/server.py`): a small HTTP
  * server that keeps a model in VRAM and answers a job's request with a stream of events.
  *
  * The worker owns the process. It starts it for the first job that needs it, reuses one that already
  * answers, and stops it on exit.
  */
-export type PythonService = {
+export type PythonService = GpuService & {
   start: () => Promise<void>
-  stop: () => void
-  unload: () => Promise<boolean>
   stream: <TEvent>(route: string, body: unknown) => AsyncGenerator<TEvent>
-  describe: () => Promise<Engine.Service>
 }
 
-const services: PythonService[] = []
+const services: GpuService[] = []
+
+/**
+ * Adds a service to the ones `claimGpu` clears and `stopServices` stops.
+ */
+export function registerService(service: GpuService) {
+  services.push(service)
+}
 
 export function createPythonService(options: ServiceOptions): PythonService {
   const baseUrl = `http://127.0.0.1:${options.port}`
@@ -217,13 +247,20 @@ export function createPythonService(options: ServiceOptions): PythonService {
     return { name: options.label, state, address: `127.0.0.1:${options.port}` }
   }
 
-  const service: PythonService = { start, stop, unload, stream, describe }
-  services.push(service)
+  const service: PythonService = {
+    onGpu: options.onGpu ?? true,
+    start,
+    stop,
+    unload,
+    stream,
+    describe
+  }
+  registerService(service)
   return service
 }
 
 /**
- * Every Python service, as the header lists them.
+ * Every service, as the header lists them.
  */
 export function describeServices() {
   return Promise.all(services.map((service) => service.describe()))
@@ -259,13 +296,16 @@ export function findModelFolders(
 /**
  * Clears the card for whoever works next. The engines share one GPU and their models don't fit side by side,
  * so before a job everything else gives its VRAM back: the other services' models, and ComfyUI's unless the
- * job runs on ComfyUI itself. Jobs of one kind in a row pay nothing.
+ * job runs on ComfyUI itself. Jobs of one kind in a row pay nothing. A service on the CPU is left out both
+ * ways: it needs no VRAM, and its models in RAM don't stand in anyone's way.
  *
  * @param user - Who works next, and so keeps its models: a service, `"comfy"` for a ComfyUI job, or
  *   `null` for an engine that holds nothing between jobs (stable-diffusion.cpp)
  */
-export async function claimGpu(user: PythonService | "comfy" | null) {
-  const others = services.filter((service) => service !== user)
+export async function claimGpu(user: GpuService | "comfy" | null) {
+  if (user !== null && user !== "comfy" && !user.onGpu) return
+
+  const others = services.filter((service) => service !== user && service.onGpu)
   const unloaded = await Promise.all(others.map((service) => service.unload()))
   let hasFreed = unloaded.some(Boolean)
 

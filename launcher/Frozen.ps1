@@ -4,7 +4,7 @@
 #
 #   - ComfyUI, headless (no Comfy Desktop window), unless it is already running
 #   - the app on http://localhost:8190, unless it is already running
-#   - the queue worker, which also starts the voice and caption services when a job needs them
+#   - the queue worker, which also starts the voice, caption and chat engines when a job needs them
 #
 # The app runs as a production build (`start:prod`). The build is made here when there is none, or when the
 # code has changed since the last one, which adds about half a minute to that start. If the build fails,
@@ -212,12 +212,13 @@ function Stop-Orphans {
     return $count
 }
 
-# The engines the worker starts all live in this project's folders: the two Python services and sd-cli.
+# The engines the worker starts all live in this project's folders: the two Python services, sd-cli and
+# llama-server.
 # One that is still alive when Frozen quits (its worker was started by hand, or the service was) would keep
 # its model in VRAM, so quitting stops every one of them, whoever started it.
 function Stop-Engines {
     $here = [regex]::Escape($Root)
-    $pattern = "$here[\\/](tts|caption)[\\/]server\.py|$here[\\/]sdcpp[\\/]"
+    $pattern = "$here[\\/](tts|caption)[\\/]server\.py|$here[\\/](sdcpp|chat)[\\/]"
     Get-CimInstance Win32_Process |
         Where-Object { $_.CommandLine -and $_.CommandLine -match $pattern } |
         ForEach-Object { Stop-ProcessTree $_.ProcessId }

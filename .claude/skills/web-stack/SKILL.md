@@ -53,8 +53,9 @@ in `node_modules/@heroui/styles/dist/components/`.
 | Queue        | Redis (`redis` v6)                                                     | List + pub/sub — see [engine](references/engine.md)         |
 | Engine       | ComfyUI, driven by `src/worker/`                                       | The app never calls it — see [engine](references/engine.md) |
 | Engine (2nd) | stable-diffusion.cpp in `sdcpp/` (`sd-cli`, one run per job)           | Image jobs with a GGUF text encoder                         |
-| Voice        | VoxCPM2, Qwen3-TTS, Parler-TTS in `tts/` (Python 3.12, two envs)       | Started by the worker — see [engine](references/engine.md)  |
+| Voice        | VoxCPM2, Qwen3-TTS in `tts/` (Python 3.12, `tts/.venv-design`)         | Started by the worker — see [engine](references/engine.md)  |
 | Caption      | Ministral 3 8B in `caption/` (Python 3.12, PyTorch, transformers 5)    | Started by the worker — see [engine](references/engine.md)  |
+| Chat         | llama.cpp `llama-server` in `chat/`, GGUF models                       | Started by the worker — see [engine](references/engine.md)  |
 | Validation   | Zod v4                                                                 | env, Server Action input, forms                             |
 | URL state    | nuqs v2                                                                | `createSearchParamsCache` on the server                     |
 | Forms        | react-hook-form v7 + `@hookform/resolvers`                             | Zod resolver, shares the action's validator                 |
@@ -97,6 +98,8 @@ in `node_modules/@heroui/styles/dist/components/`.
   [database.md](references/database.md).
 - `bun tests/status.spec.ts` — the worker's status, the Redis queue and the newest jobs.
 - `bun tests/job.spec.ts "<prompt>"` — queue an image job without the UI.
+- `bun tests/import-character.spec.ts <card.md>` — create a chat character from a Markdown
+  card.
 - `tts/.venv-design/Scripts/python.exe tts/server.py --models-root tts/models --output-root <folder>`
   — run the voice service by hand to try a request with `curl`. Python packages for it are
   installed with `uv pip install --python tts/.venv-design/Scripts/python.exe …`.

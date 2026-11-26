@@ -11,6 +11,7 @@ import { redis } from "@/libs/redis"
 
 import { findCaptionModels } from "./caption"
 import { readVramUsers } from "./gpu"
+import { findChatModels } from "./llama"
 import { readMemory } from "./memory"
 import { withSdCppModels } from "./sdcpp"
 import { describeServices } from "./service"
@@ -69,18 +70,20 @@ export async function isAnotherWorkerRunning() {
 
 /**
  * Everything that can run right now: what ComfyUI has, what stable-diffusion.cpp adds to its image models,
- * and the voice and caption engines, which are installed beside this project and don't need ComfyUI at
- * all.
+ * and the voice, caption and chat engines, which are installed beside this project and don't need ComfyUI
+ * at all.
  */
 function allModels(): Engine.Models {
   const voice = findVoiceModels()
   const caption = findCaptionModels()
+  const chat = findChatModels()
 
   return {
     ...state.models,
     image: withSdCppModels(state.models.image),
     voice: voice.length > 0 ? { models: voice } : null,
-    caption: caption.length > 0 ? { models: caption } : null
+    caption: caption.length > 0 ? { models: caption } : null,
+    chat: chat.length > 0 ? { models: chat } : null
   }
 }
 
@@ -101,7 +104,7 @@ async function isDatabaseOnline() {
  * a browser through it.
  */
 async function describeAll(): Promise<Engine.Service[]> {
-  const [isDatabaseUp, pythonServices] = await Promise.all([
+  const [isDatabaseUp, engineServices] = await Promise.all([
     isDatabaseOnline(),
     describeServices()
   ])
@@ -118,7 +121,7 @@ async function describeAll(): Promise<Engine.Service[]> {
       address: `${DB.host}:${DB.port}`
     },
     { name: "Redis", state: "online", address: `${REDIS.host}:${REDIS.port}` },
-    ...pythonServices
+    ...engineServices
   ]
 }
 

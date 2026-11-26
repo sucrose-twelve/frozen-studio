@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import {
   captionSchema,
+  chatSchema,
   comfySchema,
   dbSchema,
   envSchema,
@@ -19,6 +20,7 @@ export type RedisSchema = z.infer<typeof redisSchema>
 export type ComfySchema = z.infer<typeof comfySchema>
 export type TtsSchema = z.infer<typeof ttsSchema>
 export type CaptionSchema = z.infer<typeof captionSchema>
+export type ChatSchema = z.infer<typeof chatSchema>
 export type SdCppSchema = z.infer<typeof sdCppSchema>
 
 export const ENV = envSchema.parse({
@@ -53,14 +55,20 @@ export const TTS = ttsSchema.parse({
   port: process.env.TTS_PORT,
   python: process.env.TTS_PYTHON,
   modelDir: process.env.TTS_MODEL_DIR,
-  designPort: process.env.TTS_DESIGN_PORT,
-  designPython: process.env.TTS_DESIGN_PYTHON
+  device: process.env.TTS_DEVICE
 })
 
 export const CAPTION = captionSchema.parse({
   port: process.env.CAPTION_PORT,
   python: process.env.CAPTION_PYTHON,
   modelDir: process.env.CAPTION_MODEL_DIR
+})
+
+export const CHAT = chatSchema.parse({
+  port: process.env.CHAT_PORT,
+  server: process.env.CHAT_SERVER,
+  modelDir: process.env.CHAT_MODEL_DIR,
+  context: process.env.CHAT_CONTEXT
 })
 
 export const SDCPP = sdCppSchema.parse({

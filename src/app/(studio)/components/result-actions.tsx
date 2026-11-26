@@ -13,6 +13,7 @@ import { useCallback, useState } from "react"
 
 import { createJob, rerollJob } from "@/actions/jobs/create"
 import type { AssetView, JobDetail } from "@/actions/jobs/read"
+import { isStudioMode } from "@/libs/job"
 
 import { usePrefill } from "../hooks/use-prefill"
 import { useStudioQuery } from "../hooks/use-studio-query"
@@ -60,7 +61,8 @@ export function ResultActions({
     const result = await rerollJob({ id: job.id })
     setPending(null)
 
-    if (result.ok) openJob(result.id, job.kind === "caption" ? "image" : job.kind)
+    // A caption's result is text, and chat jobs never reach here: a reroll of those shows on the Image form
+    if (result.ok) openJob(result.id, isStudioMode(job.kind) ? job.kind : "image")
     else toast.danger(result.message)
   }, [job.id, job.kind, openJob])
 

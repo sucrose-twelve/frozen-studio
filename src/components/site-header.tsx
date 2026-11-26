@@ -17,7 +17,7 @@ import { MemoryStatus } from "./memory-status"
 export function SiteHeader() {
   return (
     <header className='border-separator bg-background/85 sticky top-0 z-40 h-16 border-b backdrop-blur'>
-      <div className='max-w-9xl mx-auto flex h-full items-center gap-6 px-5'>
+      <div className='flex h-full items-center gap-6 px-5'>
         <NextLink href='/' className='flex items-center gap-3'>
           <span className='bg-accent text-accent-foreground grid size-9 place-items-center rounded-xl'>
             <Snowflake size={20} strokeWidth={1.75} />

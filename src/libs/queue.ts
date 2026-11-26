@@ -15,15 +15,20 @@ export async function publishEvent(event: Engine.Event) {
  * one is so a page can show it before loading it.
  *
  * @param jobs - Rows already saved with status `queued`
+ * @param options.isUrgent - Put them at the front, to run next: a chat reply someone is waiting for goes
+ *   ahead of a batch of images
  */
-export async function enqueueJobs(jobs: Engine.JobBrief[]) {
+export async function enqueueJobs(
+  jobs: Engine.JobBrief[],
+  { isUrgent = false }: { isUrgent?: boolean } = {}
+) {
   if (jobs.length === 0) return
 
   const client = await redis()
-  await client.lPush(
-    REDIS_KEYS.queue,
-    jobs.map((job) => job.id)
-  )
+  const ids = jobs.map((job) => job.id)
+  // The worker takes from the right (BRPOP): the right end is the front of the queue
+  if (isUrgent) await client.rPush(REDIS_KEYS.queue, ids)
+  else await client.lPush(REDIS_KEYS.queue, ids)
   await Promise.all(
     jobs.map((brief) =>
       publishEvent({ type: "job", id: brief.id, status: "queued", brief })

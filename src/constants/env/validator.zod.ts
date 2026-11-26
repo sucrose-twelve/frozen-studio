@@ -31,17 +31,17 @@ export const redisSchema = z.object({
  * `modelDir` is the model the Voice form starts on. The other model folders beside it can be picked in the
  * form.
  *
- * There are two environments, because the families need different versions of the same libraries, and
- * the same service runs once from each: `designPython` on `designPort` for the models that make a voice up
- * from a free description (VoxCPM2, Qwen3-TTS), and `python` on `port` for Japanese Parler-TTS. Either
- * can be left uninstalled.
+ * `python` is the environment both models (VoxCPM2, Qwen3-TTS) run from.
+ *
+ * `device` is where they run: `cuda` puts them on the GPU when there is one, `cpu` keeps them in RAM. On
+ * the CPU a line takes far longer, but the voice never asks the chat or image models to give their VRAM
+ * back.
  */
 export const ttsSchema = z.object({
   port: z.string().transform(Number).default(8191),
-  python: z.string().default("tts/.venv/Scripts/python.exe"),
+  python: z.string().default("tts/.venv-design/Scripts/python.exe"),
   modelDir: z.string().default("tts/models/VoxCPM2"),
-  designPort: z.string().transform(Number).default(8193),
-  designPython: z.string().default("tts/.venv-design/Scripts/python.exe")
+  device: z.enum(["cuda", "cpu"]).default("cuda")
 })
 
 /**
@@ -53,6 +53,22 @@ export const captionSchema = z.object({
   port: z.string().transform(Number).default(8192),
   python: z.string().default("caption/.venv/Scripts/python.exe"),
   modelDir: z.string().default("caption/models/Ministral-3-8B-Uncensored-FP8")
+})
+
+/**
+ * llama.cpp's `llama-server`, which the worker runs for chat replies: one process holds one model, and a job
+ * that names another restarts it.
+ *
+ * - `server` is the executable, relative to the project root.
+ * - `modelDir` holds the models as GGUF files; each one is a choice on the Chat page.
+ * - `context` is the context length in tokens. 16k took 13–14 GB of VRAM with a 12B model at Q6_K and a
+ *   14B at Q5_K_M, on a 16 GB card.
+ */
+export const chatSchema = z.object({
+  port: z.string().transform(Number).default(8194),
+  server: z.string().default("chat/bin/llama/llama-server.exe"),
+  modelDir: z.string().default("chat/models"),
+  context: z.string().transform(Number).default(16_384)
 })
 
 /**

@@ -5,8 +5,8 @@ The queue worker starts this process when a voice job arrives and is its only cl
 127.0.0.1 and writes files only under --output-root.
 
     GET  /health    {"status": "ok", "loaded": false, "model": null, "device": null}
-    POST /generate  {"model": "<folder name>", "engine": "parler", "lines": [{"text": "...", "file": "<path>.wav"}],
-                     "description": "...", "seed": 1}
+    POST /generate  {"model": "<folder name>", "engine": "voxcpm", "lines": [{"text": "...", "file": "<path>.wav"}],
+                     "description": "...", "seed": 1, "reference": "<path>.wav", "joined": "<path>.wav"}
                     answers with one JSON object per line, as things happen:
                         {"event": "loading"}
                         {"event": "line", "index": 0}
@@ -14,14 +14,20 @@ The queue worker starts this process when a voice job arrives and is its only cl
                         {"event": "done"}  or  {"event": "error", "message": "..."}
     POST /unload    frees the model, and with it the VRAM, until the next /generate
 
+`reference` (optional) is a clip of the voice to keep: VoxCPM2 clones it for every line instead of making a
+voice up from the description, so a character sounds the same from one request to the next. Qwen3-TTS
+can't clone and ignores it. `joined` (optional) writes all the lines into that one file, a short
+pause apart, instead of a file per line; its `saved` event has index 0.
+
 A model is a folder under --models-root, named in each request together with its engine: the family of
-model it is, which decides how it is loaded and spoken with (see ENGINES). The families need different
-versions of the same libraries, so each Python environment runs its own copy of this service, and only
-has the packages of its own engines; the worker knows which one to ask.
+model it is, which decides how it is loaded and spoken with (see ENGINES).
 
 A model loads, with everything heavy (torch, transformers), on the first /generate that asks for it, so
 the process starts at once and holds no VRAM while nobody is using it. One model is held at a time: asking
 for another drops the one in memory first.
+
+--device picks where models run: "cuda" puts them on the GPU when there is one, "cpu" keeps them in RAM
+(far slower, but it needs no VRAM).
 
 The worker passes its own process id (--parent-pid). When that process is gone, the service exits rather
 than linger with the model in VRAM.
@@ -54,106 +60,31 @@ def seed_everything(seed):
         torch.cuda.manual_seed_all(seed)
 
 
+def resolve_device(requested):
+    """The torch device to load on: the CPU when asked for, or when there is no CUDA GPU."""
+    import torch
+
+    if requested == "cuda" and torch.cuda.is_available():
+        return "cuda:0"
+    return "cpu"
+
+
 class Engine:
     """
-    One family of voice model: how it loads from a folder and speaks a line. `begin` is called once per
-    job, before its first line, and `release` when the model is dropped.
+    One family of voice model: how it loads from a folder onto a device and speaks a line. `begin` is
+    called once per job, before its first line, with the clip to clone if the request gave one, and
+    `release` when the model is dropped.
     """
 
     def __init__(self):
         self.model = None
         self.device = None
 
-    def begin(self):
+    def begin(self, reference=None):
         pass
 
     def release(self):
         pass
-
-
-class ParlerEngine(Engine):
-    """
-    Japanese Parler-TTS. The description is read by a small text encoder that only knows the words of its
-    training captions (pitch, pace, expressiveness, recording quality), and the model has one female voice.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.prompt_tokenizer = None
-        self.description_tokenizer = None
-        self.tagger = None
-        self.kakasi = None
-
-    def load(self, model_dir):
-        import torch
-        from parler_tts import ParlerTTSForConditionalGeneration
-        from transformers import AutoTokenizer
-
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        # This model has its own tokenizers, one for the spoken text and one for the voice description;
-        # the ones Parler-TTS ships with don't fit it
-        self.prompt_tokenizer = AutoTokenizer.from_pretrained(
-            model_dir, subfolder="prompt_tokenizer", local_files_only=True
-        )
-        self.description_tokenizer = AutoTokenizer.from_pretrained(
-            model_dir, subfolder="description_tokenizer", local_files_only=True
-        )
-        self.model = ParlerTTSForConditionalGeneration.from_pretrained(
-            model_dir, local_files_only=True
-        ).to(self.device)
-        self.model.eval()
-
-    def add_ruby(self, text):
-        """
-        Writes the reading after every word that isn't already kana: 石炭 becomes 石炭[せきたん].
-
-        The model was trained on text prepared this way, and without it kanji are often misread. The
-        logic follows RubyInserter (https://github.com/getuka/RubyInserter, MIT), the tool the model card
-        asks for.
-        """
-        if self.tagger is None:
-            import MeCab
-            from pykakasi import kakasi
-
-            self.tagger = MeCab.Tagger()
-            self.kakasi = kakasi()
-
-        def hiragana(value):
-            return "".join(part["hira"] for part in self.kakasi.convert(value))
-
-        pieces = []
-        for line in self.tagger.parse(text).splitlines():
-            # Only the lines that describe a word have tabs: surface, pronunciation, reading, lemma, …
-            if "\t" not in line:
-                continue
-
-            parts = line.split("\t")
-            surface = parts[0]
-            if parts[1] == "":
-                reading = hiragana(parts[3])
-                pieces.append(surface if reading == surface else f"{surface}[{reading}]")
-            elif hiragana(parts[2]) == surface or hiragana(parts[1]) == surface:
-                pieces.append(surface)
-            else:
-                pieces.append(f"{surface}[{hiragana(parts[1])}]")
-
-        return "".join(pieces)
-
-    def speak(self, text, description):
-        import torch
-
-        described = self.description_tokenizer(description, return_tensors="pt").to(self.device)
-        prompt = self.prompt_tokenizer(self.add_ruby(text), return_tensors="pt").to(self.device)
-
-        with torch.inference_mode():
-            generation = self.model.generate(
-                input_ids=described.input_ids,
-                attention_mask=described.attention_mask,
-                prompt_input_ids=prompt.input_ids,
-                prompt_attention_mask=prompt.attention_mask,
-            )
-
-        return generation.cpu().numpy().squeeze(), self.model.config.sampling_rate
 
 
 class QwenDesignEngine(Engine):
@@ -166,11 +97,11 @@ class QwenDesignEngine(Engine):
     not identical: holding one voice needs the family's voice-cloning model, which is not set up.
     """
 
-    def load(self, model_dir):
+    def load(self, model_dir, device):
         import torch
         from qwen_tts import Qwen3TTSModel
 
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.device = device
         self.model = Qwen3TTSModel.from_pretrained(
             model_dir,
             device_map=self.device,
@@ -192,30 +123,47 @@ class VoxCpmEngine(Engine):
 
     A voice made up twice from one description is two different voices, even with the same seed. So only
     the first line of a job is designed; the others clone that line's clip, which the same model can do,
-    and the job stays one speaker.
+    and the job stays one speaker. A request that brings its own clip (a chat character's voice sample)
+    clones that one from the first line on.
     """
 
     def __init__(self):
         super().__init__()
-        # The first line's clip, on disk, for the later lines to clone
+        # The clip the lines clone: the first line's, on disk, or the request's own
         self.reference = None
+        # Whether `reference` is a temporary file of this engine's, to delete when done
+        self.owns_reference = False
 
-    def begin(self):
+    def begin(self, reference=None):
         self.release()
+        if reference:
+            self.reference = reference
 
     def release(self):
-        if self.reference and os.path.exists(self.reference):
+        if self.owns_reference and self.reference and os.path.exists(self.reference):
             os.remove(self.reference)
         self.reference = None
+        self.owns_reference = False
 
-    def load(self, model_dir):
-        import torch
+    def load(self, model_dir, device):
         from voxcpm import VoxCPM
+        from voxcpm.model import voxcpm2
 
-        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.device = device
+        # The checkpoint is bfloat16, which VoxCPM keeps on the CPU. A CPU without bfloat16 units runs it
+        # several times slower than float32, and drifts into retried lines as it does on MPS, where the
+        # library itself switches to float32. Wrapped once per process
+        library_pick = voxcpm2.pick_runtime_dtype
+        if not getattr(library_pick, "float32_on_cpu", False):
+
+            def pick(on, configured):
+                return "float32" if on == "cpu" else library_pick(on, configured)
+
+            pick.float32_on_cpu = True
+            voxcpm2.pick_runtime_dtype = pick
         # The denoiser only cleans up reference recordings for voice cloning, and is fetched from the
         # network when asked for: neither is wanted here
-        self.model = VoxCPM.from_pretrained(model_dir, load_denoiser=False)
+        self.model = VoxCPM.from_pretrained(model_dir, load_denoiser=False, device=device)
 
     def speak(self, text, description):
         import tempfile
@@ -235,21 +183,24 @@ class VoxCpmEngine(Engine):
             text=f"({described}){text}", cfg_value=2.0, inference_timesteps=10
         )
         handle, self.reference = tempfile.mkstemp(prefix="frozen-voice-", suffix=".wav")
+        self.owns_reference = True
         os.close(handle)
         soundfile.write(self.reference, wave, sample_rate)
         return wave, sample_rate
 
 
-# The families of model this service can run, by the name the worker asks for them with. An environment
-# only has the packages of some of them; asking for another fails at its import, with a plain message.
-ENGINES = {"parler": ParlerEngine, "qwen": QwenDesignEngine, "voxcpm": VoxCpmEngine}
+# The families of model this service can run, by the name the worker asks for them with. A family whose
+# package isn't installed fails at its import, with a plain message.
+ENGINES = {"qwen": QwenDesignEngine, "voxcpm": VoxCpmEngine}
 
 
 class Voice:
     """The model in use: loaded on first use, and swapped when another is asked for."""
 
-    def __init__(self, models_root):
+    def __init__(self, models_root, device):
         self.models_root = models_root
+        # Where models load: "cuda" (the GPU when there is one) or "cpu"
+        self.requested_device = device
         # The folder name of the model in memory
         self.name = None
         self.engine = None
@@ -284,7 +235,7 @@ class Voice:
         started = time.monotonic()
         engine = ENGINES[kind]()
         try:
-            engine.load(model_dir)
+            engine.load(model_dir, resolve_device(self.requested_device))
         except ImportError as error:
             raise RuntimeError(
                 f"this Python environment can't run {kind} models ({error.name} is not installed)"
@@ -322,13 +273,17 @@ class Voice:
         seed_everything(seed)
         samples, sample_rate = self.engine.speak(text, description)
         samples = numpy.asarray(samples, dtype="float32").reshape(-1)
-        # The models don't speak at one level, from each other or from line to line (Parler peaks around
-        # -10 dBFS). Every clip is brought up to the same peak so a set of lines sits together.
+        # The models don't speak at one level, from each other or from line to line. Every clip is brought
+        # up to the same peak so a set of lines sits together.
         peak = float(abs(samples).max()) if samples.size else 0.0
         if peak > 0:
             samples = samples * (TARGET_PEAK / peak)
 
         return samples, int(sample_rate)
+
+
+# The silence between two lines written into one file: about a breath
+JOIN_PAUSE_SECONDS = 0.3
 
 
 def inside(root, file_path):
@@ -385,14 +340,19 @@ def make_handler(voice, output_root):
                 body = self.read_json()
                 model = str(body["model"])
                 voice.folder(model)
-                # Requests from before there was more than one family name none
-                kind = str(body.get("engine", "parler"))
+                kind = str(body["engine"])
                 if kind not in ENGINES:
                     raise ValueError(f"no engine named {kind!r}")
                 lines = body["lines"]
                 description = str(body["description"])
                 seed = int(body["seed"])
-                for line in lines:
+                reference = body.get("reference")
+                joined = body.get("joined")
+                if reference and not (inside(output_root, reference) and os.path.isfile(reference)):
+                    raise ValueError(f"{reference} is not a clip in the output folder")
+                if joined and not inside(output_root, joined):
+                    raise ValueError(f"{joined} is outside the output folder")
+                for line in [] if joined else lines:
                     if not inside(output_root, line["file"]):
                         raise ValueError(f"{line['file']} is outside the output folder")
             except (KeyError, TypeError, ValueError) as error:
@@ -416,13 +376,22 @@ def make_handler(voice, output_root):
                         emit({"event": "loading"})
                         voice.load(model, kind)
 
+                    import numpy
                     import soundfile
 
-                    voice.engine.begin()
+                    voice.engine.begin(reference)
+                    pieces = []
                     for index, line in enumerate(lines):
                         emit({"event": "line", "index": index})
                         started = time.monotonic()
                         samples, sample_rate = voice.speak(str(line["text"]), description, seed)
+                        if joined:
+                            if pieces:
+                                pause = int(sample_rate * JOIN_PAUSE_SECONDS)
+                                pieces.append(numpy.zeros(pause, dtype="float32"))
+                            pieces.append(samples)
+                            log(f"line {index + 1}/{len(lines)} in {time.monotonic() - started:.1f}s")
+                            continue
 
                         os.makedirs(os.path.dirname(line["file"]), exist_ok=True)
                         soundfile.write(line["file"], samples, sample_rate, subtype="PCM_16")
@@ -434,6 +403,20 @@ def make_handler(voice, output_root):
                                 "index": index,
                                 "file": line["file"],
                                 "seconds": round(seconds, 3),
+                                "sampleRate": sample_rate,
+                            }
+                        )
+
+                    if joined and pieces:
+                        samples = numpy.concatenate(pieces)
+                        os.makedirs(os.path.dirname(joined), exist_ok=True)
+                        soundfile.write(joined, samples, sample_rate, subtype="PCM_16")
+                        emit(
+                            {
+                                "event": "saved",
+                                "index": 0,
+                                "file": joined,
+                                "seconds": round(len(samples) / sample_rate, 3),
                                 "sampleRate": sample_rate,
                             }
                         )
@@ -493,13 +476,19 @@ def main():
     )
     parser.add_argument("--output-root", required=True, help="Files may only be written under here")
     parser.add_argument(
+        "--device",
+        choices=["cuda", "cpu"],
+        default="cuda",
+        help="Where models run: the GPU when there is one, or the CPU",
+    )
+    parser.add_argument(
         "--parent-pid",
         type=int,
         help="Exit when this process is gone. Without it the service runs until it is stopped",
     )
     args = parser.parse_args()
 
-    voice = Voice(os.path.abspath(args.models_root))
+    voice = Voice(os.path.abspath(args.models_root), args.device)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(voice, args.output_root))
     if args.parent_pid:
         threading.Thread(target=exit_with_parent, args=(args.parent_pid,), daemon=True).start()

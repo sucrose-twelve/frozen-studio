@@ -1,4 +1,4 @@
-# The engine — jobs, queue, worker, ComfyUI, voice, caption
+# The engine — jobs, queue, worker, ComfyUI, voice, caption, chat
 
 ```
 Browser ──► Next.js app ──► Postgres   jobs, assets, job_inputs
@@ -8,7 +8,8 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job_inputs
                               │            ┌──► ComfyUI ──────────► images, cutouts
                               │            ├──► sdcpp/ (sd-cli) ──► images: GGUF text encoders, Iris
                            Worker ─────────┼──► tts/server.py ────► voice clips
-                                           └──► caption/server.py ► descriptions and prompts
+                                           ├──► caption/server.py ► descriptions and prompts
+                                           └──► chat/ llama-server ► chat replies
 ```
 
 Two processes share this repo:
@@ -19,7 +20,7 @@ Two processes share this repo:
   client of the engines. It runs one job at a time: one GPU, and the models don't fit side
   by side.
 
-And four engines do the generating:
+And five engines do the generating:
 
 - **ComfyUI**, for image and cutout jobs. It is a separate program, started by hand or by
   `launcher/Frozen.ps1`; the worker waits for it and never starts or stops it.
@@ -31,6 +32,8 @@ And four engines do the generating:
   [the voice engine](#the-voice-engine).
 - The **captioning service** (`caption/server.py`), for caption jobs, owned by the worker
   in the same way. See [the caption engine](#the-caption-engine).
+- **llama.cpp's server** (`chat/bin/llama/llama-server.exe`), for chat replies, also owned
+  by the worker. See [the chat engine](#the-chat-engine).
 
 There is exactly one worker. A second one refuses to start while the first is alive (it
 watches whether the status in Redis keeps getting newer), since it would run a second job
@@ -43,12 +46,12 @@ Postgres is the record; Redis is the transport. If they disagree, Postgres wins 
 
 All names are in `REDIS_KEYS` (`@/constants`) and prefixed `frozen:`.
 
-| Name             | Type    | Written by | Read by  | Holds                                                     |
-| ---------------- | ------- | ---------- | -------- | --------------------------------------------------------- |
-| `frozen:queue`   | list    | app        | worker   | Job ids. `LPUSH` to add, `BRPOP` to take, `LREM` to drop  |
-| `frozen:engine`  | string  | worker     | app      | JSON `Engine.Status`, rewritten every 4 s with a 15 s TTL |
-| `frozen:events`  | pub/sub | worker/app | browsers | JSON `Engine.Event`, relayed by `/api/events`             |
-| `frozen:control` | pub/sub | app        | worker   | JSON `Engine.Control` (`{ type: "cancel", id }`)          |
+| Name             | Type    | Written by | Read by  | Holds                                                                                             |
+| ---------------- | ------- | ---------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `frozen:queue`   | list    | app        | worker   | Job ids. `LPUSH` to add, `BRPOP` to take, `LREM` to drop. A chat reply is `RPUSH`ed, to the front |
+| `frozen:engine`  | string  | worker     | app      | JSON `Engine.Status`, rewritten every 4 s with a 15 s TTL                                         |
+| `frozen:events`  | pub/sub | worker/app | browsers | JSON `Engine.Event`, relayed by `/api/events`                                                     |
+| `frozen:control` | pub/sub | app        | worker   | JSON `Engine.Control` (`{ type: "cancel", id }`)                                                  |
 
 A missing `frozen:engine` key means the worker isn't running: the header says "Worker
 offline" and the forms can't know what is installed.
@@ -66,7 +69,8 @@ App code uses `@/libs/queue` (`enqueueJobs`, `dequeueJobs`, `requestCancel`,
 | `failed`    | worker | Anything threw; the message is in `jobs.error`                                    |
 | `canceled`  | either | The app (still queued) or the worker (running, after interrupt)                   |
 
-Every change is published as `{ type: "job", id, status, error? }`.
+Every change is published as `{ type: "job", id, status, error? }`. A chat reply also
+publishes its text so far as `{ type: "chat", id, messageId, text }`.
 
 ### Queueing a job
 
@@ -279,48 +283,48 @@ Voice jobs don't touch ComfyUI. `runVoiceJob` (`worker/voice.ts`) talks to
 | `POST /generate` | Speaks `lines` (`{ text, file }`) with one `description` and `seed`; streams one JSON event per line |
 | `POST /unload`   | Drops the model, and its VRAM, until the next `/generate`                                            |
 
-- **Three families of model** (`Media.VoiceFamily`, read from the folder's name by
-  `voiceFamily`): VoxCPM2 (the default), Qwen3-TTS VoiceDesign and Japanese Parler-TTS.
-  Each is an `Engine` class in `server.py` (how it loads, how it speaks a line), and a
-  request names the one its model needs (`engine`).
-- **Two Python environments, so the service runs twice.** Parler-TTS needs an older
-  transformers than the other two can run with. `tts/.venv` runs it on `TTS_PORT`;
-  `tts/.venv-design` runs Qwen3-TTS and VoxCPM2 on `TTS_DESIGN_PORT`. The worker picks the
-  service by the model's family (`FAMILY_ENVIRONMENT`), and `claimGpu` has the other one
-  drop its model.
+- **Two families of model** (`Media.VoiceFamily`, read from the folder's name by
+  `voiceFamily`): VoxCPM2 (the default) and Qwen3-TTS VoiceDesign. Each is an `Engine`
+  class in `server.py` (how it loads, how it speaks a line), and a request names the one
+  its model needs (`engine`). Both run from one Python environment, `tts/.venv-design`
+  (`TTS_PYTHON`).
+- **GPU or CPU** (`TTS_DEVICE`, passed as `--device`): `cuda` loads on the GPU when there
+  is one, `cpu` keeps the models in RAM. The service on the CPU is created with
+  `onGpu: false`, so `claimGpu` leaves it out both ways: it neither unloads the chat or
+  ComfyUI models before a voice job nor is unloaded by them. On the CPU, VoxCPM2 runs in
+  float32 (`VoxCpmEngine.load` wraps the library's `pick_runtime_dtype`): the checkpoint's
+  bfloat16 was 1.8× slower on the owner's i7-14700F and drifted into retried lines. A line
+  of about 4 s took VoxCPM2 4–5 s on the GPU and 27–30 s on that CPU; Qwen3-TTS 7–12 s on
+  the GPU and 23 s on the CPU.
 - **Installed or not** is read from disk, by `findVoiceModels()`: the script, and every
-  model folder that holds its family's files (`IS_MODEL`) and whose environment has its
-  Python. That is all `Engine.Models.voice` means; nothing is started to find out.
-- **The worker owns the process.** It starts the service for the first voice job
-  (`startVoiceEngine`), reuses one that already answers, and stops it on exit. The service
-  is given the worker's process id and exits when that process is gone, so a killed worker
-  doesn't leave the model in VRAM.
+  environment's Python, and every model folder that holds its family's files (`IS_MODEL`).
+  That is all `Engine.Models.voice` means; nothing is started to find out.
+- **The worker owns the process.** It starts the service for the first voice job (`start`
+  of `createPythonService`), reuses one that already answers, and stops it on exit. The
+  service is given the worker's process id and exits when that process is gone, so a
+  killed worker doesn't leave the model in VRAM.
 - **Don't watch stdin for that.** A thread blocked reading a stdin pipe deadlocks the
   whole service on Windows as soon as the model's libraries start a child process while
   loading. The parent is watched by process id (`exit_with_parent` in `server.py`), and
   the service is started with stdin closed.
 - **Stopping kills the tree.** On Windows the environment's `python.exe` is a launcher
-  with the real interpreter as its child; `stopVoiceEngine` uses `taskkill /T`. Stopping
-  is also how a running voice job is canceled.
+  with the real interpreter as its child; its `stop` uses `taskkill /T`. Stopping is also
+  how a running voice job is canceled.
 - **Events** from `/generate` (`loading`, `line`, `saved`, `done`, `error`) become
   progress labels ("Loading the voice model", "Speaking · 2 / 5") and, for `saved`, an
   `assets` row of kind `audio`.
 - **The voice** is not a speaker id. The model is told what the speaker sounds like
-  (`params.description`), and the presets in `VOICE_PRESETS` are such descriptions, a set
-  per family, since the families read them differently. Parler-TTS only knows the words of
-  its training captions (pitch, pace, tone, recording) and has one female voice; "JSUT"
-  names it. The other two make a voice up from plain words. The form's advice per family
-  is `VOICE_FAMILY_NOTES`.
-- **One job, one speaker.** Every line gets the same seed. That is enough for Parler-TTS.
-  A voice made up twice from one description is two voices, so VoxCPM2 only designs the
-  first line and clones its clip for the rest (`VoxCpmEngine`); Qwen3-TTS would need its
-  cloning model for that, which isn't set up, and its lines can differ a little.
-- **The text** gets furigana before Parler-TTS speaks it (`add_ruby`), because that model
-  was trained that way and misreads bare kanji. Qwen3-TTS is told the script is Japanese;
-  VoxCPM2 works the language out. Each clip is normalised to one peak level.
-- **Python packages** are in `tts/requirements.txt` and `tts/requirements-design.txt`,
-  with the reason next to each pin that isn't obvious. PyTorch must be the CUDA 12.8 build
-  for RTX 50-series cards.
+  (`params.description`), and the presets in `VOICE_PRESETS` are such descriptions, in
+  plain words; both families make a voice up from them. The form's advice per family is
+  `VOICE_FAMILY_NOTES`.
+- **One job, one speaker.** Every line gets the same seed, but a voice made up twice from
+  one description is two voices, so VoxCPM2 only designs the first line and clones its
+  clip for the rest (`VoxCpmEngine`); Qwen3-TTS would need its cloning model for that,
+  which isn't set up, and its lines can differ a little.
+- **The text** goes in as it is. Qwen3-TTS is told the script is Japanese; VoxCPM2 works
+  the language out. Each clip is normalised to one peak level.
+- **Python packages** are in `tts/requirements.txt`, with the reason next to each pin that
+  isn't obvious. PyTorch must be the CUDA 12.8 build for RTX 50-series cards.
 
 A request can be tried by hand, with the service started in a terminal:
 
@@ -378,6 +382,100 @@ curl -s -X POST http://127.0.0.1:8192/caption -H "Content-Type: application/json
   -d '{"model":"Ministral-3-8B-Uncensored-FP8","image":"D:/tmp/apple.png","mode":"prompts","style":"prose","prompt":""}'
 ```
 
+## The chat engine
+
+A chat reply is a job of kind `chat`, queued by the Chat page's actions
+(`app/(studio)/chat/actions/create.ts`), not by `createJob`. The app saves the user's
+message and an **empty assistant message**, then a job whose params name the chat and that
+message (`Media.ChatParams`), and `RPUSH`es it so it runs next: someone is waiting for it.
+One reply at a time per chat; the actions refuse a second.
+
+`runChatJob` (`worker/chat.ts`) talks to `llama-server`, which `worker/llama.ts` runs:
+
+- **One process, one model.** It is started with
+  `--model <file> --ctx-size CHAT_CONTEXT --parallel 1 --flash-attn on`, every layer on
+  the GPU. A job that names another model restarts it; `unload` stops it (a 10 GB model
+  reads back from disk in a few seconds). It is in the same registry as the Python
+  services (`registerService`), so `claimGpu` clears the card for it, other jobs make it
+  let go, and the header lists it.
+- **It can't watch the worker's process.** Its pid is kept in
+  `chat/bin/llama/llama-server.pid`, and the next start (or `stop`) kills a server a
+  killed worker left behind. The launcher's Quit stops anything running from `chat/`.
+- **The prompt is built in the worker** (`@/libs/chat-prompt`): the card section by
+  section (`chatSystemText`), then the conversation path (`messagePath` in `@/libs/chat`)
+  up to the reply's parent, with `{{char}}` / `{{user}}` filled in. Its format follows the
+  model's name (`chatFormat`): ChatML for Qwen, ending on an empty `<think>` block so
+  Qwen3 answers without reasoning first; Mistral's `[INST]` turns for Mistral Nemo builds,
+  with the system text inside the first `[INST]` (Rocinante's card says not to use
+  `[SYSTEM_PROMPT]`); anything else through the file's own template (`/apply-template`).
+  The two hand-written formats were tested with a Thai card; don't fold them into the
+  template path.
+- **The context is a budget.** Tokens are counted by the server (`/tokenize`). Past
+  `CHAT_SUMMARY.triggerShare` of it (the context less `maxTokens`), the reply first has
+  the chat model **summarize the older turns** (`summarize` in `worker/chat.ts`,
+  `summarySystemText`): the summary so far plus the turns after it become one new summary,
+  saved on the last turn it covers (`chat_messages.summary`), and the newest turns stay
+  word for word: `keepShare` of the room the card leaves under the trigger. The prompt
+  carries the newest summary on the branch as "The story so far" in the system text and
+  the turns after its message. The job reports "Summarizing the story so far" while it
+  writes (a few seconds). If the prompt still doesn't fit, the oldest turns are dropped,
+  never the card or the first turn left. The Chat page shows the summary in its right
+  panel, where it can be edited (`updateStory`); editing a message clears the summaries on
+  it and under it.
+- **Streaming.** `/completion` with `stream: true`. Every `CHAT_STREAM_INTERVAL_MS` the
+  text so far goes out as a `chat` event (the whole text, so a page that opens mid-reply
+  catches up), and every `CHAT_SAVE_INTERVAL_MS` it is written to the message, so a worker
+  that dies loses little.
+- **Stopping** aborts the request; the server and its model stay. The reply keeps what was
+  written, and the job ends `canceled`.
+- **Sampling** is the chat's (`chats.settings`), copied into the job's params:
+  temperature, min-p (top-p and top-k off), a light repeat penalty, and DRY.
+- **Against replies that copy the last one.** At temperature 0.7 Qwen3 began copying its
+  previous reply from about the fifth turn (same opening, the user's words echoed back,
+  same closing line). Three things stop it, all tested together: DRY looks back
+  `CHAT_DRY.range` tokens (llama-server's default of 64 is less than a paragraph of Thai),
+  the default temperature is 0.85, and the system text ends with a "How to reply" rule
+  (`chatSystemText`). DRY over the whole context broke Thai spelling and names the
+  character had to recall, so the range stays at a few replies and runs under
+  `CHAT_DRY.allowedLength` tokens go free. Don't add names to DRY's sequence breakers: a
+  paragraph with the name in it then repeats unchecked.
+
+```sh
+chat/bin/llama/llama-server.exe --model chat/models/<file>.gguf --n-gpu-layers 99 --ctx-size 16384 --port 8194
+curl -s http://127.0.0.1:8194/completion -d '{"prompt":"Hello","n_predict":16}'
+```
+
+### Spoken messages
+
+A **speech job** (`kind: "speech"`, `worker/speech.ts`) says a chat message aloud in its
+character's voice, or, with `messageId` null, makes the character's **voice sample**. The
+voice is set in the character editor (`characters.voice`: model, description, language,
+seed, sample). Both kinds are `RPUSH`ed like a reply.
+
+- **What is spoken** is the dialogue only (`dialogueOf` in `@/libs/chat`: the parts in
+  quotes, or the text less its `*actions*`). When the character speaks Japanese and the
+  dialogue has no kana, the **chat model translates it** (`translationSystemText`, low
+  temperature), so the job claims the GPU for llama first and the voice model after. The
+  text that was spoken is kept on the message (`speech_text`) and shown under the player.
+- **One voice.** The sample is made up once from the description (a new seed each time);
+  every message after it is spoken by **cloning the sample** (`reference` in
+  `tts/server.py`). Only VoxCPM2 clones; the other families make a voice up per message. A
+  new sample replaces the old one and deletes the old clip.
+- **One clip per message.** The lines (`speechLines`, at most `SPEECH_MAX_LINE_LENGTH`
+  characters, cut at sentence ends) are written into one file (`joined`), a short pause
+  apart: `<output>/frozen/<jobId>/speech.wav`. It is an asset of the speech job, kept out
+  of the gallery (`readGallery` skips speech jobs).
+- **Cleanup.** Editing a message drops its clip (`deleteSpeech`); deleting messages, a
+  chat or a character deletes their speech jobs and clips.
+- **Timing, measured:** a sample took 53 s the first time (VoxCPM2 loading); a
+  300-character Japanese line took about 70 s: a few seconds to translate (Qwen3-14B
+  reloading) and about one second of compute per second of audio. The next reply then
+  reloads the chat model.
+
+Chat and speech jobs (`CHAT_JOB_KINDS`) stay out of the studio's job UI: no toast
+(`job-toasts.tsx` skips them), no refresh of other pages when one ends (`job-events.tsx`),
+no recent strip and no gallery. A failed reply or speech shows its error on its message.
+
 ### Adding a kind of job
 
 1. `Media.JobKind` and a `…Params` type in `src/types/schema.d.ts`; add it to `JOB_KINDS`
@@ -431,9 +529,11 @@ with (`COMFY_INPUT_DIR`, `COMFY_OUTPUT_DIR`), inside a `frozen/` subfolder
 - The worker reports which other programs hold VRAM (`worker/gpu.ts`, a Windows
   performance counter read through PowerShell). From 1 GB up the header warns: with a game
   open, the models spill into shared memory and a job that takes a minute takes ten.
-- **The engines take turns** (`claimGpu` in `worker/service.ts`). Before a voice or
-  caption job the worker asks ComfyUI to drop its models (`freeComfyMemory`) and the other
-  service to unload; before a ComfyUI job both services unload; before a
-  stable-diffusion.cpp job all three do. The voice model takes about 4 GB and loads in a
-  few seconds; the caption model takes about 10 GB and half a minute; ComfyUI's take
-  longer to come back. Jobs of one kind in a row pay nothing.
+- **The engines take turns** (`claimGpu` in `worker/service.ts`). Before a voice, caption
+  or chat job the worker asks ComfyUI to drop its models (`freeComfyMemory`) and the other
+  services to unload; before a ComfyUI job they all unload; before a stable-diffusion.cpp
+  job everything does. The voice model takes about 4 GB and loads in a few seconds; the
+  caption model takes about 10 GB and half a minute; a chat model 13–14 GB with its
+  context, and a few seconds; ComfyUI's take longer to come back. Jobs of one kind in a
+  row pay nothing. A service with `onGpu: false` (the voice with `TTS_DEVICE=cpu`) takes
+  no part.

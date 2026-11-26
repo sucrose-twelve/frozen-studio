@@ -1,10 +1,10 @@
 import { readComboOptions } from "./client"
 
 /**
- * The part of `Engine.Models` that lives in ComfyUI. The voice and caption engines are found by the worker
+ * The part of `Engine.Models` that lives in ComfyUI. The voice, caption and chat engines are found by the worker
  * itself.
  */
-export type ComfyModels = Omit<Engine.Models, "voice" | "caption">
+export type ComfyModels = Omit<Engine.Models, "voice" | "caption" | "chat">
 
 function pick(names: string[], ...patterns: RegExp[]) {
   for (const pattern of patterns) {

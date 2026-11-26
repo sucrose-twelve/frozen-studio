@@ -1,18 +1,19 @@
 # Frozen Studio • Local AI media generator
 
-A local media studio: a web UI for generating images and voice lines, and for describing
-images, with models that run on this machine. Forms on the left, the result on the right,
-every result kept in a gallery.
+A local media studio: a web UI for generating images and voice lines, for describing
+images, and for chatting with characters, with models that run on this machine. Forms on
+the left, the result on the right, every result kept in a gallery.
 
 ![Frozen Studio: a form on the left, the result on the right](public/screenshot.png)
 
-| Mode    | What it does                                                                                                                                                                                                           | Model                                   |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| Image   | Text to image, or an edit / mix of up to 4 reference images (Qwen-Image only: MOSS-Image and the Sakura and Turbo builds draw new images). Can also save a transparent cutout of the result                            | Qwen-Image 2.1, MOSS-Image, Iris        |
-| Cutout  | Background removal for up to 12 images at once                                                                                                                                                                         | BiRefNet                                |
-| Voice   | Text to speech, Japanese first: a script becomes one WAV clip per line, in a voice shaped by a description                                                                                                             | VoxCPM2, Qwen3-TTS, Japanese Parler-TTS |
-| Caption | Image and text to text: a detailed description of each image with a positive and a negative prompt that ask for it again, or an answer to whatever the prompt asks about it. The text can be sent on to the Image form | Ministral 3 8B                          |
-| Gallery | Every result, with favorites. A result can be rerolled, have its settings reused, or be sent on to another form                                                                                                        | —                                       |
+| Mode    | What it does                                                                                                                                                                                                                                                                                          | Model                            |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Image   | Text to image, or an edit / mix of up to 4 reference images (Qwen-Image only: MOSS-Image and the Sakura and Turbo builds draw new images). Can also save a transparent cutout of the result                                                                                                           | Qwen-Image 2.1, MOSS-Image, Iris |
+| Cutout  | Background removal for up to 12 images at once                                                                                                                                                                                                                                                        | BiRefNet                         |
+| Voice   | Text to speech, Japanese first: a script becomes one WAV clip per line, in a voice shaped by a description                                                                                                                                                                                            | VoxCPM2, Qwen3-TTS               |
+| Caption | Image and text to text: a detailed description of each image with a positive and a negative prompt that ask for it again, or an answer to whatever the prompt asks about it. The text can be sent on to the Image form                                                                                | Ministral 3 8B                   |
+| Chat    | Roleplay with characters you write (or import from a Markdown card): replies stream in as they are written, can be stopped, regenerated into several takes, edited or deleted, and each chat picks its own model and sampling. A character with a voice says its lines aloud, in Japanese if you like | Any GGUF model on llama.cpp      |
+| Gallery | Every result, with favorites. A result can be rerolled, have its settings reused, or be sent on to another form                                                                                                                                                                                       | —                                |
 
 ## How it fits together
 
@@ -24,7 +25,8 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
                               │            ┌──► ComfyUI ──────────► images, cutouts
                               │            ├──► sdcpp/ (sd-cli) ──► images from GGUF text encoders
                            Worker ─────────┼──► tts/server.py ────► voice clips
-                                           └──► caption/server.py ► descriptions and prompts
+                                           ├──► caption/server.py ► descriptions and prompts
+                                           └──► chat/ (llama-server) ► chat replies
 ```
 
 - The **app** never talks to an engine. Submitting a form validates it, writes a `jobs`
@@ -34,10 +36,10 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
   `assets` rows.
 - Images and cutouts run on **ComfyUI**, which is started separately. Voice runs on a
   small **text-to-speech service** in `tts/` and captions on a **captioning service** in
-  `caption/`; the worker starts each itself when a job needs it. An image job whose text
-  encoder is a GGUF runs on **stable-diffusion.cpp** instead, a program in `sdcpp/` the
-  worker runs once per job. They all share the GPU: whichever works next gets the VRAM the
-  others were holding.
+  `caption/`, and chat replies on **llama.cpp's server** in `chat/`; the worker starts
+  each itself when a job needs it. An image job whose text encoder is a GGUF runs on
+  **stable-diffusion.cpp** instead, a program in `sdcpp/` the worker runs once per job.
+  They all share the GPU: whichever works next gets the VRAM the others were holding.
 - Progress reaches the browser as Server-Sent Events: the worker publishes to Redis,
   `/api/events` relays it.
 - Media stays where ComfyUI puts it. Frozen writes into a `frozen/` subfolder of ComfyUI's
@@ -59,6 +61,8 @@ Browser ──► Next.js app ──► Postgres   jobs, assets, job inputs
 - For Caption (optional): uv again, about 16 GB of disk, and a card with 12 GB of VRAM or
   more
 - For GGUF text encoders (optional): stable-diffusion.cpp, about 1.3 GB of disk
+- For Chat (optional): llama.cpp, about 650 MB, and a GGUF model of 8–11 GB for a 16 GB
+  card
 
 A mode whose models are missing is disabled in the UI with a note saying what it needs.
 
@@ -76,14 +80,13 @@ files from disk.
 
 ### Voice (optional)
 
-The text-to-speech service has its own Python environment and its models in `tts/models`;
-neither is committed. The models that make a voice up from a free description (a girl, an
-old man) share one environment, `tts/.venv-design`. From the project root:
+The text-to-speech service has its own Python environment, `tts/.venv-design`, and its
+models in `tts/models`; neither is committed. From the project root:
 
 ```sh
 uv venv tts/.venv-design --python 3.12
 uv pip install --python tts/.venv-design/Scripts/python.exe torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
-uv pip install --python tts/.venv-design/Scripts/python.exe -r tts/requirements-design.txt
+uv pip install --python tts/.venv-design/Scripts/python.exe -r tts/requirements.txt
 tts/.venv-design/Scripts/python.exe tts/download_model.py
 tts/.venv-design/Scripts/python.exe tts/download_model.py qwen
 ```
@@ -96,18 +99,6 @@ on, and
 GB, which can be left out. Restart the worker afterwards; the Voice form unlocks once it
 sees an environment and a model in place, and lists every model whose folder is in
 `tts/models`. There is nothing to start by hand.
-
-A third model,
-[Japanese Parler-TTS](https://huggingface.co/2121-8/japanese-parler-tts-mini) (3.5 GB), is
-still supported. It has one female voice and reads little of a description, and it needs
-older libraries, so it gets an environment of its own:
-
-```sh
-uv venv tts/.venv --python 3.12
-uv pip install --python tts/.venv/Scripts/python.exe torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
-uv pip install --python tts/.venv/Scripts/python.exe -r tts/requirements.txt
-tts/.venv/Scripts/python.exe tts/download_model.py parler
-```
 
 ### stable-diffusion.cpp (optional)
 
@@ -156,6 +147,35 @@ Other vision-language models can sit beside it: every folder under `caption/mode
 an image-text-to-text model works, as long as it fits the card: weights stored in FP8 stay
 in FP8, everything else loads at 16 bits, so a full-precision 8B model needs about 18 GB.
 
+### Chat (optional)
+
+Chat runs on llama.cpp's `llama-server`. From its
+[releases](https://github.com/ggml-org/llama.cpp/releases), unpack the Windows build for
+CUDA 13 (`llama-<build>-bin-win-cuda-13.5-x64.zip`) and its runtime
+(`cudart-llama-bin-win-cuda-13.5-x64.zip`) together into `chat/bin/llama/`; an RTX
+50-series card needs CUDA 12.8 or newer. Put GGUF models in `chat/models/`. Both folders
+are not committed.
+
+Two models were tried with a Thai character card on a 16 GB card, each with a 16k context:
+
+| Model                                                                                                                     | Size    | VRAM   | Speed     | Notes                                |
+| ------------------------------------------------------------------------------------------------------------------------- | ------- | ------ | --------- | ------------------------------------ |
+| [Huihui-Qwen3-14B-abliterated-v2](https://huggingface.co/mradermacher/Huihui-Qwen3-14B-abliterated-v2-i1-GGUF), i1-Q5_K_M | 10.5 GB | ~14 GB | ~71 tok/s | The best Thai of the two             |
+| [Rocinante-X 12B](https://huggingface.co/TheDrummer/Rocinante-X-12B-v1-GGUF), Q6_K                                        | 10.1 GB | ~13 GB | ~76 tok/s | Lively English roleplay; broken Thai |
+
+Every `.gguf` file in `chat/models` is offered in a chat's Model list. Qwen models are
+written to in ChatML and Mistral Nemo builds (Rocinante, Mag-Mell, `MN-…`) in Mistral's
+`[INST]` format; any other model uses the chat template inside its file. `CHAT_CONTEXT`
+sets the context length (16384 by default); a longer one takes more VRAM.
+
+A card written in Markdown, one `## section` per field (`name`, `description`,
+`personality`, `speaking style`, `scenario`, `first_message`, `example dialogues`,
+`tags & system prompt`), can be imported:
+
+```sh
+bun tests/import-character.spec.ts path/to/card.md
+```
+
 ## Run
 
 ### One click (Windows)
@@ -196,17 +216,18 @@ Start ComfyUI first, or at any point: until it is up, the header's status chip s
 amber light (press it to see which service is down) and image and cutout jobs wait in the
 queue. Voice jobs don't need it.
 
-| Script                      | What it does                                             |
-| --------------------------- | -------------------------------------------------------- |
-| `bun run dev`               | App (`start:dev`) and worker together                    |
-| `bun run start:dev`         | Only the Next.js dev server                              |
-| `bun run worker`            | Only the queue worker                                    |
-| `bun run build`             | Production build (type-checks everything)                |
-| `bun run start:prod`        | Serve the production build                               |
-| `bun run drizzle:generate`  | Write a migration from the schema                        |
-| `bun run drizzle:migrate`   | Apply migrations                                         |
-| `bun tests/status.spec.ts`  | Print the worker's status, the queue and the newest jobs |
-| `bun tests/job.spec.ts "…"` | Queue an image job from the command line                 |
+| Script                                         | What it does                                             |
+| ---------------------------------------------- | -------------------------------------------------------- |
+| `bun run dev`                                  | App (`start:dev`) and worker together                    |
+| `bun run start:dev`                            | Only the Next.js dev server                              |
+| `bun run worker`                               | Only the queue worker                                    |
+| `bun run build`                                | Production build (type-checks everything)                |
+| `bun run start:prod`                           | Serve the production build                               |
+| `bun run drizzle:generate`                     | Write a migration from the schema                        |
+| `bun run drizzle:migrate`                      | Apply migrations                                         |
+| `bun tests/status.spec.ts`                     | Print the worker's status, the queue and the newest jobs |
+| `bun tests/job.spec.ts "…"`                    | Queue an image job from the command line                 |
+| `bun tests/import-character.spec.ts <card.md>` | Create a chat character from a Markdown card             |
 
 The `tests/` folder holds scripts, not automated tests.
 
@@ -216,7 +237,7 @@ The `tests/` folder holds scripts, not automated tests.
 src/
 ├── actions/      Server Actions and readers, by domain: jobs/, assets/, engine/
 ├── app/
-│   ├── (studio)/ The studio (/) and the gallery (/gallery), with their components
+│   ├── (studio)/ The studio (/), caption, chat and the gallery, with their components
 │   └── api/      events (SSE), media/[id] (files), uploads (reference images)
 ├── components/   Shared UI: header, service and memory chips, event stream, job toasts
 ├── constants/    Value lists and labels, Redis key names, env
@@ -228,6 +249,7 @@ src/
 tts/              The text-to-speech service (Python): server.py, requirements.txt
 caption/          The captioning service (Python): server.py, requirements.txt
 sdcpp/            stable-diffusion.cpp, unpacked here (not committed)
+chat/             llama.cpp in bin/ and GGUF models in models/ (not committed)
 launcher/         Frozen.ps1: starts ComfyUI, the app and the worker in one click
 ```
 
@@ -244,15 +266,32 @@ Conventions for the code live in `.claude/skills/web-stack/`.
   for "a high school girl" and 120 Hz for "a man in his forties". With VoxCPM2 the first
   line sets the voice and the others copy it, and it works out the script's language by
   itself, Thai included; with Qwen3-TTS every line is made up afresh, so the lines of a
-  job can differ a little. Japanese Parler-TTS has one female voice and reads only pitch,
-  pace, tone and recording quality: the same sentence stays between about 246 and 300 Hz
-  whatever the description says. A line may be up to 160 characters. The first job after
-  an image job takes longer, while the voice model loads back into VRAM.
+  job can differ a little. A line may be up to 160 characters. The first job after an
+  image job takes longer, while the voice model loads back into VRAM.
+- **Voice on the CPU.** `TTS_DEVICE=cpu` in `.env` keeps the voice models in RAM, so a
+  voice line no longer makes the chat or image models leave the card. It is slower: a line
+  of about 4 seconds took VoxCPM2 27–30 s instead of 4–5 s, and Qwen3-TTS 23 s instead of
+  7–12 s, on an i7-14700F.
 - **Caption.** A caption takes about a minute: half of it is the model loading, which the
   next caption in a row doesn't pay again. The description and the positive prompt are
   read from the image; the negative prompt can't be, and is the model's advice for that
   kind of image. Captions are text, so they are kept on the Caption page, in its recent
   strip, and not in the gallery.
+- **Spoken chat.** A character with a voice (set in its editor: describe it, then make a
+  sample) can say its messages aloud: press the speaker under a message. Only what is said
+  in quotes is spoken, translated into Japanese by the chat model when the character
+  speaks Japanese, and in a voice cloned from the sample (VoxCPM2). It takes about as long
+  as the clip lasts, plus a few seconds, and the next reply reloads the chat model.
+- **Chat.** A reply goes to the front of the queue, ahead of waiting images. The chat
+  model stays loaded between replies; an image, voice or caption job makes it let go of
+  the card, and the next reply reads it back from disk in a few seconds. A reply that is
+  stopped keeps what it had written. One reply at a time per chat: Send turns into Stop
+  while one is on the way.
+- **Long chats.** When a chat grows past most of `CHAT_CONTEXT` (16k tokens, roughly 25
+  turns of Thai with a long card), the next reply first has the model summarize the older
+  messages, which takes a few seconds; replies then read the summary and the newest
+  messages. The summary shows under "Story so far" in the chat's right panel, where you
+  can correct it.
 - **Models.** The Image, Voice and Caption forms each start with a Model list of what is
   installed for them: the Qwen-Image and MOSS-Image files ComfyUI has, and the model
   folders under `tts/models` and `caption/models`. Nothing needs editing in `.env` to

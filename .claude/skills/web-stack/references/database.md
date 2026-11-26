@@ -18,14 +18,35 @@ examples show: relations are defined once with `defineRelations`, columns come f
 
 ## Tables
 
-| Table        | One row is…                                                                            |
-| ------------ | -------------------------------------------------------------------------------------- |
-| `jobs`       | One generation request: `kind`, `status`, `prompt`, `params` (jsonb), `error`, timings |
-| `assets`     | One media file on disk: an upload (`job_id` null) or something a job made              |
-| `job_inputs` | One reference image of a job, in order. An asset can feed many jobs                    |
+| Table           | One row is…                                                                            |
+| --------------- | -------------------------------------------------------------------------------------- |
+| `jobs`          | One generation request: `kind`, `status`, `prompt`, `params` (jsonb), `error`, timings |
+| `assets`        | One media file on disk: an upload (`job_id` null) or something a job made              |
+| `job_inputs`    | One reference image of a job, in order. An asset can feed many jobs                    |
+| `characters`    | A chat character's card; its avatar and portrait are uploads (`assets`, set null)      |
+| `personas`      | Who the user plays in chats; the one with `is_default` is used by every chat           |
+| `chats`         | One conversation: its character, `settings` (model, sampling), `head_message_id`       |
+| `chat_messages` | One message; `parent_id` makes the chat a tree, `job_id` is a reply's chat job         |
 
 Deleting a job cascades to its assets and inputs; deleting an asset cascades to the
 `job_inputs` that point at it.
+
+A chat's messages are a **tree**: a regenerated reply is a sibling of the one it replaces
+(same `parent_id`), and so are the greetings a chat opens with (parent null). What is on
+screen is the path from the first message to `chats.head_message_id`, which has no foreign
+key (the two tables point at each other); the actions keep it on a message of its chat.
+The helpers that walk it are in `@/libs/chat` (`messagePath`, `siblingsOf`, `newestLeaf`).
+Deleting a message deletes everything after it (`parent_id` cascades); deleting a chat or
+a character deletes what is under it. A reply's `job_id` is set null when its job goes.
+
+`chat_messages.summary` is the chat model's summary of the story from the first message
+down to that one, written when older turns had to leave the context. A reply reads the
+newest summary on its branch in place of the messages it covers, so branches keep their
+own summaries.
+
+`characters.voice` (jsonb, `Media.CharacterVoice`) is how a character sounds, with the
+asset id of its voice sample; `chat_messages.speech_job_id` and `speech_text` are a
+message spoken aloud: the speech job (its clip is that job's asset) and the words it said.
 
 ## Table conventions
 

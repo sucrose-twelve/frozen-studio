@@ -33,9 +33,21 @@ export type Prefill = {
   prompt?: { positive: string; negative?: string }
 }
 
+/**
+ * A chat reply as the worker last sent it, while it is written: its text so far, and the job writing it.
+ */
+export type ReplyLive = {
+  jobId: string
+  text: string
+}
+
 type State = {
   engine: Engine.Status | null
   jobs: Record<string, JobLive>
+  /**
+   * Chat replies by message id.
+   */
+  replies: Record<string, ReplyLive>
   prefill: Prefill | null
 }
 
@@ -49,6 +61,7 @@ export type StudioState = State & Actions
 export const createStudioStore = (initialState: Pick<State, "engine" | "jobs">) =>
   createStore<StudioState>()((setState) => ({
     ...initialState,
+    replies: {},
     prefill: null,
     requestPrefill: (prefill) => setState({ prefill }),
     applyEvent: (event) =>
@@ -76,6 +89,13 @@ export const createStudioStore = (initialState: Pick<State, "engine" | "jobs">) 
                   ...state.jobs[event.id],
                   progress: { label: event.label, value: event.value, max: event.max }
                 }
+              }
+            }
+          case "chat":
+            return {
+              replies: {
+                ...state.replies,
+                [event.messageId]: { jobId: event.id, text: event.text }
               }
             }
         }

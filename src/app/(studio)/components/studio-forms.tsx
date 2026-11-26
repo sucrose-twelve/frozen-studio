@@ -5,6 +5,7 @@ import { useCallback, useEffect } from "react"
 
 import { JOB_KIND_LABELS } from "@/constants"
 import { useStore } from "@/hooks"
+import { isStudioMode } from "@/libs/job"
 
 import { useStudioQuery } from "../hooks/use-studio-query"
 import { CutoutForm } from "./cutout-form"
@@ -44,7 +45,7 @@ export function StudioForms() {
   )
 
   useEffect(() => {
-    if (prefill && prefill.kind !== "caption") void setMode(prefill.kind)
+    if (prefill && isStudioMode(prefill.kind)) void setMode(prefill.kind)
   }, [prefill, setMode])
 
   return (

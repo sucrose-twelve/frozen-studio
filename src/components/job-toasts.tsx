@@ -6,7 +6,12 @@ import { useRouter } from "next/navigation"
 import { useEffect, useRef } from "react"
 
 import { cancelJob } from "@/actions/jobs/update"
-import { ACTIVE_JOB_STATUSES, JOB_KIND_LABELS, JOB_STATUS_LABELS } from "@/constants"
+import {
+  ACTIVE_JOB_STATUSES,
+  CHAT_JOB_KINDS,
+  JOB_KIND_LABELS,
+  JOB_STATUS_LABELS
+} from "@/constants"
 import { useStore } from "@/hooks"
 import type { JobLive } from "@/stores/studio/state"
 
@@ -15,8 +20,12 @@ import type { JobLive } from "@/stores/studio/state"
  */
 const FINISHED_TIMEOUT_MS = 6_000
 
+const isChatJob = (kind: Media.JobKind) =>
+  (CHAT_JOB_KINDS as readonly Media.JobKind[]).includes(kind)
+
 /**
- * Where a job is shown: the Caption page for a caption, the studio in the job's mode for the rest.
+ * Where a job is shown: the Caption page for a caption, the studio in the job's mode for the rest. The Chat
+ * page's jobs have no toast.
  */
 function jobPath({ id, kind }: Engine.JobBrief) {
   return kind === "caption" ? `/caption?job=${id}` : `/?job=${id}&mode=${kind}`
@@ -117,7 +126,8 @@ export function JobToasts() {
   useEffect(() => {
     for (const [id, job] of Object.entries(jobs)) {
       const { brief, status } = job
-      if (!brief || !status || closed.current.has(id)) continue
+      // A chat reply or a spoken message shows in its chat, as it happens, and not as a job
+      if (!brief || !status || isChatJob(brief.kind) || closed.current.has(id)) continue
       if (shown.current.get(id) === job) continue
       shown.current.set(id, job)
 

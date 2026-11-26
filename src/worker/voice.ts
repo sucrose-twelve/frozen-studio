@@ -26,45 +26,24 @@ type VoiceEvent =
 const SERVER_SCRIPT = "tts/server.py"
 
 /**
- * The service runs once per Python environment: the families need different versions of the same
- * libraries. Both copies see the same models folder and write to the same place.
+ * The service sees the models folder, and writes only where the media goes.
  */
-const serviceArgs = [
-  "--models-root",
-  path.dirname(path.resolve(TTS.modelDir)),
-  "--output-root",
-  path.resolve(COMFY.outputDir, MEDIA_FOLDER)
-]
-const ENVIRONMENTS = {
-  parler: {
-    python: TTS.python,
-    service: createPythonService({
-      name: "voice",
-      label: "Voice · Parler-TTS",
-      python: TTS.python,
-      script: SERVER_SCRIPT,
-      port: TTS.port,
-      args: serviceArgs
-    })
-  },
-  design: {
-    python: TTS.designPython,
-    service: createPythonService({
-      name: "voice design",
-      label: "Voice · VoxCPM2, Qwen3-TTS",
-      python: TTS.designPython,
-      script: SERVER_SCRIPT,
-      port: TTS.designPort,
-      args: serviceArgs
-    })
-  }
-}
-
-const FAMILY_ENVIRONMENT: Record<Media.VoiceFamily, keyof typeof ENVIRONMENTS> = {
-  parler: "parler",
-  qwen: "design",
-  voxcpm: "design"
-}
+const service = createPythonService({
+  name: "voice",
+  label: "Voice · VoxCPM2, Qwen3-TTS",
+  python: TTS.python,
+  script: SERVER_SCRIPT,
+  port: TTS.port,
+  args: [
+    "--models-root",
+    path.dirname(path.resolve(TTS.modelDir)),
+    "--output-root",
+    path.resolve(COMFY.outputDir, MEDIA_FOLDER),
+    "--device",
+    TTS.device
+  ],
+  onGpu: TTS.device === "cuda"
+})
 
 const has = (folder: string, name: string) => fs.existsSync(path.join(folder, name))
 
@@ -72,30 +51,83 @@ const has = (folder: string, name: string) => fs.existsSync(path.join(folder, na
  * Whether a folder holds a model of its family, judged by the files that family's loader reads.
  */
 const IS_MODEL: Record<Media.VoiceFamily, (folder: string) => boolean> = {
-  parler: (folder) =>
-    (has(folder, "model.safetensors") || has(folder, "pytorch_model.bin")) &&
-    has(folder, "prompt_tokenizer") &&
-    has(folder, "description_tokenizer"),
   qwen: (folder) => has(folder, "model.safetensors") && has(folder, "speech_tokenizer"),
   voxcpm: (folder) => has(folder, "model.safetensors") && has(folder, "audiovae.pth")
 }
 
 /**
  * The voice models that can run, by folder name, the default one first. Empty when nothing is installed
- * (the service script, a Python environment, a model for it), which disables the Voice form.
+ * (the service script, its Python environment, a model), which disables the Voice form.
  *
- * A folder counts when it holds a model of the family its name says, and that family's Python environment
- * is there to run it.
+ * A folder counts when it holds a model of the family its name says.
  */
 export function findVoiceModels() {
   if (!fs.existsSync(path.resolve(SERVER_SCRIPT))) return []
+  if (!fs.existsSync(path.resolve(TTS.python))) return []
 
-  return findModelFolders(TTS.modelDir, (folder) => {
-    const family = voiceFamily(path.basename(folder))
-    const environment = ENVIRONMENTS[FAMILY_ENVIRONMENT[family]]
+  return findModelFolders(TTS.modelDir, (folder) =>
+    IS_MODEL[voiceFamily(path.basename(folder))](folder)
+  )
+}
 
-    return fs.existsSync(path.resolve(environment.python)) && IS_MODEL[family](folder)
-  })
+/**
+ * Speaks lines into one WAV file, a short pause between them: a chat message, or a character's voice sample.
+ *
+ * @param options.reference - A clip of the voice to keep. VoxCPM2 clones it; Qwen3-TTS can't, and makes
+ *   the voice up from the description as usual
+ * @param options.report - Says what is happening, for the job's progress
+ * @returns The length of the clip, in seconds
+ * @throws {CanceledError} When the job was canceled
+ * @throws {Error} When the engine doesn't start, or fails to speak
+ */
+export async function speakToFile(options: {
+  model: string
+  lines: string[]
+  description: string
+  seed: number
+  reference: string | null
+  file: string
+  control: RunControl
+  report: (label: string, value?: number, max?: number) => void
+}) {
+  const { model, lines, control, report } = options
+  const family = voiceFamily(model)
+
+  control.cancel = async () => service.stop()
+  if (control.isCanceled) throw new CanceledError()
+
+  report("Starting the voice engine")
+  await claimGpu(service)
+  await service.start()
+  if (control.isCanceled) throw new CanceledError()
+
+  let seconds: number | null = null
+  try {
+    const events = service.stream<VoiceEvent>("/generate", {
+      model,
+      engine: family,
+      lines: lines.map((text) => ({ text, file: options.file })),
+      description: options.description,
+      seed: options.seed,
+      reference: family === "voxcpm" ? options.reference : null,
+      joined: options.file
+    })
+
+    for await (const event of events) {
+      if (event.event === "loading") report("Loading the voice model")
+      else if (event.event === "line") report("Speaking", event.index + 1, lines.length)
+      else if (event.event === "saved") seconds = event.seconds
+      else if (event.event === "error") throw new Error(event.message)
+    }
+  } catch (error) {
+    if (control.isCanceled) throw new CanceledError()
+    throw error
+  }
+
+  if (control.isCanceled) throw new CanceledError()
+  if (seconds === null)
+    throw new Error("The voice engine stopped before it finished speaking")
+  return seconds
 }
 
 /**
@@ -122,9 +154,8 @@ export async function runVoiceJob(
       () => undefined
     )
 
-  // The model's family says which environment's service speaks it, and how
+  // The model's family says how the service speaks it
   const family = voiceFamily(params.model)
-  const { service } = ENVIRONMENTS[FAMILY_ENVIRONMENT[family]]
 
   // Stopping the service is how a running voice job is canceled
   control.cancel = async () => service.stop()

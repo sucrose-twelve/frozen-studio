@@ -21,17 +21,25 @@ import { voiceFamily, voiceLabel } from "@/libs/voice-model"
 
 import { useDefaultModel } from "../hooks/use-default-model"
 import { useStudioQuery } from "../hooks/use-studio-query"
-import { defaultVoicePreset, parseSeed, VOICE_FORM_DEFAULTS } from "../utils"
+import { parseSeed, VOICE_FORM_DEFAULTS } from "../utils"
 import { FieldMessage, FieldRow, FormDivider, FormSection } from "./form-parts"
 import { ModelSelect } from "./model-select"
 import { SubmitBar } from "./submit-bar"
 
 /**
+ * The voice list: every preset, then "Custom" for a description written by hand.
+ */
+const VOICE_OPTIONS = [
+  ...VOICE_PRESETS.map((preset) => ({ id: preset.id, label: preset.label })),
+  { id: VOICE_CUSTOM, label: voiceLabel(VOICE_CUSTOM) }
+]
+
+/**
  * The Voice form: a script, spoken one clip per line by the chosen model.
  *
  * The voice isn't picked from a list of speakers. The model is told what the speaker sounds like, and
- * the presets are such descriptions; editing one makes it a custom voice. What a description can ask for
- * depends on the model's family, so the presets and the advice under them change with the model.
+ * the presets are such descriptions; editing one makes it a custom voice. The advice under them, and the
+ * languages a script can be in, change with the model's family.
  */
 export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
   const engine = useEngine()
@@ -53,16 +61,8 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
     () => (models ?? []).map((name) => ({ id: name, label: name })),
     [models]
   )
-  // With no model yet, the form shows the first family's presets (VOICE_FORM_DEFAULTS)
-  const family = model ? voiceFamily(model) : VOICE_FAMILIES[0]
-  const notes = VOICE_FAMILY_NOTES[family]
-  const voiceOptions = useMemo(
-    () => [
-      ...VOICE_PRESETS[family].map((preset) => ({ id: preset.id, label: preset.label })),
-      { id: VOICE_CUSTOM, label: voiceLabel(VOICE_CUSTOM) }
-    ],
-    [family]
-  )
+  // With no model yet, the form shows the first family's notes
+  const notes = VOICE_FAMILY_NOTES[model ? voiceFamily(model) : VOICE_FAMILIES[0]]
 
   const lineCount = useMemo(() => scriptLines(prompt).length, [prompt])
   const blocker = !engine
@@ -75,18 +75,8 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
       ? "Every line of the script becomes its own clip."
       : `${lineCount} ${lineCount === 1 ? "clip" : "clips"} · ${voiceLabel(voice)}`
 
-  // Another family reads descriptions differently, so its own first preset replaces the one on screen
   const handleModelChange = useCallback(
-    (value: string) => {
-      const previous = form.getValues("model")
-      const next = voiceFamily(value)
-      if (next !== (previous ? voiceFamily(previous) : VOICE_FAMILIES[0])) {
-        const preset = defaultVoicePreset(next)
-        form.setValue("voice", preset.voice)
-        form.setValue("description", preset.description, { shouldValidate: true })
-      }
-      form.setValue("model", value)
-    },
+    (value: string) => form.setValue("model", value),
     [form]
   )
   // Typing in the description makes the voice the user's own, whichever preset it started from
@@ -101,13 +91,13 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
         return
       }
 
-      const preset = VOICE_PRESETS[family].find((item) => item.id === key)
+      const preset = VOICE_PRESETS.find((item) => item.id === key)
       if (!preset) return
 
       form.setValue("voice", preset.id)
       form.setValue("description", preset.description, { shouldValidate: true })
     },
-    [form, family]
+    [form]
   )
   const handleSeedChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) =>
@@ -197,7 +187,7 @@ export function VoiceForm({ isActive }: Readonly<{ isActive: boolean }>) {
           </Select.Trigger>
           <Select.Popover>
             <ListBox>
-              {voiceOptions.map((option) => (
+              {VOICE_OPTIONS.map((option) => (
                 <ListBox.Item key={option.id} id={option.id} textValue={option.label}>
                   {option.label}
                   <ListBox.ItemIndicator />

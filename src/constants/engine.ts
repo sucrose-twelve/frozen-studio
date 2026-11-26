@@ -3,7 +3,7 @@
  * with other projects.
  */
 export const REDIS_KEYS = {
-  // List of job ids waiting for the worker (LPUSH by the app, BRPOP by the worker)
+  // List of job ids waiting for the worker (LPUSH by the app, RPUSH for a chat reply, BRPOP by the worker)
   queue: "frozen:queue",
   // JSON `Engine.Status`, rewritten by the worker with a short TTL
   engine: "frozen:engine",

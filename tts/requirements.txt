@@ -1,23 +1,14 @@
-# The text-to-speech service (tts/server.py), for Python 3.12.
+# The text-to-speech service (tts/server.py) and its two models, for Python 3.12, in tts/.venv-design.
 #
-# PyTorch goes in first, from its own index, so the CUDA build is the one installed:
-#
-#   uv pip install torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
-#
-# then this file:
-#
-#   uv pip install -r tts/requirements.txt
-#
-# parler-tts pins transformers itself, and pulls the Descript audio codec it decodes with.
-parler-tts @ git+https://github.com/huggingface/parler-tts.git@d108732cd57788ec86bc857d99a6cabd66663d68
+# PyTorch is installed first and separately, from the CUDA 12.8 index (see the README): RTX 50-series
+# cards need that build.
 
-# Newer sentencepiece releases ship protobuf code that needs protobuf 5, while the audio codec's tools
-# hold protobuf below 5. Loading the model's tokenizers fails on the mismatch.
-sentencepiece==0.2.0
+# Qwen3-TTS (VoiceDesign). Pins transformers itself.
+qwen-tts
 
-# Furigana for kanji, so the model reads them the intended way
-mecab-python3
-unidic-lite
-pykakasi
+# VoxCPM2
+voxcpm
 
-soundfile
+# A dependency of voxcpm's text normalizer. 1.9.1 has no ready-made build for Windows on Python 3.12 and
+# fails to compile without a C++ toolchain; 1.9.0 has one.
+kaldifst==1.9.0

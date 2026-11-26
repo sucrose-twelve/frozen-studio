@@ -1,6 +1,11 @@
 "use client"
 
-import { GalleryThumbnails, ScanText, Sparkles } from "@keyline-icons/react"
+import {
+  GalleryThumbnails,
+  MessageSquare,
+  ScanText,
+  Sparkles
+} from "@keyline-icons/react"
 import NextLink from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -9,6 +14,7 @@ import { cls } from "@/libs/utils"
 const LINKS = [
   { href: "/", label: "Studio", Icon: Sparkles },
   { href: "/caption", label: "Caption", Icon: ScanText },
+  { href: "/chat", label: "Chat", Icon: MessageSquare },
   { href: "/gallery", label: "Gallery", Icon: GalleryThumbnails }
 ] as const
 
@@ -21,7 +27,8 @@ export function HeaderNav() {
   return (
     <nav className='flex items-center gap-1'>
       {LINKS.map(({ href, label, Icon }) => {
-        const isActive = pathname === href
+        // The Chat page has the character editor under it
+        const isActive = href === "/chat" ? pathname.startsWith(href) : pathname === href
 
         return (
           <NextLink

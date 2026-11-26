@@ -9,6 +9,6 @@
 #   uv pip install -r caption/requirements.txt
 #
 # It has an environment of its own because Ministral 3 needs transformers 5, while the text-to-speech
-# service is held on transformers 4 by parler-tts. torchvision is what the model's image processor runs on.
+# service is held on transformers 4 by qwen-tts. torchvision is what the model's image processor runs on.
 transformers>=5,<6
 pillow
