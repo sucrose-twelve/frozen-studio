@@ -31,9 +31,11 @@ export function isTurboImageModel(fileName: string) {
  *
  * - A Turbo model can't, though its family can: given a reference it returns it burnt and over-sharpened
  *   (tried with one reference on its own schedule).
- * - MOSS-Image and the Sakura quantizations of Qwen-Image 2.1 aren't offered it: in the owner's tests they
- *   followed reference images poorly, MOSS-Image with its edit LoRA too. The LoRA's wiring stays in place
- *   (`IMAGE_FAMILY_SAMPLING.moss`, the image graph) for when a better one comes out.
+ * - The Sakura quantizations of Qwen-Image 2.1 aren't offered it: in the owner's tests they followed
+ *   reference images poorly.
+ * - MOSS-Image can once its edit LoRA is installed. It was off for a while for following references poorly;
+ *   with each outfit or pose cropped out on its own and described in words too, it followed a character,
+ *   an outfit and a pose well (tried 2026-11-26).
  *
  * @param installed - What the model's family has installed, which is where an edit LoRA shows up
  */
@@ -42,7 +44,6 @@ export function canEditImages(
   installed: Engine.ImageModels | undefined
 ) {
   if (isTurboImageModel(fileName) || /sakura/i.test(fileName)) return false
-  if (imageFamily(fileName) === "moss") return false
 
   const { editing } = IMAGE_FAMILY_SAMPLING[imageFamily(fileName)]
   return editing === "built-in" || (editing === "lora" && !!installed?.editLora)

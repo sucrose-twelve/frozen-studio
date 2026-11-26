@@ -96,8 +96,8 @@ in their own zone under a `FormDivider` and an "Advanced" `FormSection`.
 A control that can't apply right now stays on screen, disabled, with its description
 saying why ("Needs a background removal model in ComfyUI."), rather than disappearing. The
 one exception is the Image form's **Reference images**: the owner asked for it to be
-hidden for a model that can't edit (`canEditImages`: Turbo, Iris, MOSS-Image, Sakura), and
-references already picked are removed with a toast saying why.
+hidden for a model that can't edit (`canEditImages`: Turbo, Iris, Sakura, and MOSS-Image
+without its edit LoRA), and references already picked are removed with a toast saying why.
 
 One-line fields are all **36px** tall: `.input` and `.select__trigger` are set to `h-9` in
 `custom.css` (HeroUI's padding made them 38px); `NumberField` is 36px already.

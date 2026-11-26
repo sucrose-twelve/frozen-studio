@@ -90,7 +90,7 @@ const COUNT_OPTIONS: Option<number>[] = IMAGE_COUNTS.map((count) => ({
 
 /**
  * The Image form: text to image, or an edit when reference images are added. Qwen-Image 2.1 does both;
- * MOSS-Image, Iris and the Turbo builds only draw new images.
+ * MOSS-Image too once its edit LoRA is installed; Iris and the Turbo and Sakura builds only draw new images.
  */
 export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
   const engine = useEngine()
@@ -357,7 +357,8 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
 
     handleReferencesChange([])
     toast(`${modelLabel(model)} doesn't take reference images`, {
-      description: "They were removed. Pick a Qwen-Image model to edit or mix images."
+      description:
+        "They were removed. Pick Qwen-Image or MOSS-Image to edit or mix images."
     })
   }, [canEdit, model, form, handleReferencesChange])
 
@@ -465,9 +466,11 @@ export function ImageForm({ isActive }: Readonly<{ isActive: boolean }>) {
             <PromptField
               label='Prompt'
               placeholder={
-                hasReferences
-                  ? "What to change, in plain sentences. Say what to keep, and which image is which: “Dress the woman in image 1 in the outfit from image 2. Keep her pose.”"
-                  : "Describe the image in plain sentences: subject, setting, light, style."
+                !hasReferences
+                  ? "Describe the image in plain sentences: subject, setting, light, style."
+                  : family === "moss"
+                    ? "Say what each image is, then the change and what to keep: “Image 1 is the character, image 2 is the outfit. Show the character from image 1 wearing the outfit from image 2: (the outfit in words). Keep her face and hair.” Crop an outfit or pose out of a sheet first."
+                    : "What to change, in plain sentences. Say what to keep, and which image is which: “Dress the woman in image 1 in the outfit from image 2. Keep her pose.”"
               }
               {...field}
             />
